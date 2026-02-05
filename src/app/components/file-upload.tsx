@@ -3,12 +3,14 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/app
 import { Button } from "@/app/components/ui/button";
 import { Upload, FileJson, Loader2, Check } from "lucide-react";
 import { toast } from "sonner";
+import { functionsBaseUrl } from "@/app/utils/supabase/client";
 
 interface FileUploadProps {
   onUploadSuccess: () => void;
+  authToken: string;
 }
 
-export function FileUpload({ onUploadSuccess }: FileUploadProps) {
+export function FileUpload({ onUploadSuccess, authToken }: FileUploadProps) {
   const [isUploading, setIsUploading] = useState(false);
   const [uploadSuccess, setUploadSuccess] = useState(false);
 
@@ -30,12 +32,12 @@ export function FileUpload({ onUploadSuccess }: FileUploadProps) {
 
       // Upload to backend
       const response = await fetch(
-        `https://${import.meta.env.VITE_SUPABASE_PROJECT_ID}.supabase.co/functions/v1/make-server-84ed1a00/health-data/upload`,
+        `${functionsBaseUrl}/health-data/upload`,
         {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`
+            'Authorization': `Bearer ${authToken}`,
           },
           body: JSON.stringify(data)
         }

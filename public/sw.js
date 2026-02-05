@@ -1,11 +1,11 @@
 // Service Worker for PWA
-const CACHE_NAME = 'readiness-tracker-v1';
+const CACHE_NAME = 'readiness-tracker-v2';
 const urlsToCache = [
   '/',
   '/index.html',
-  '/icon.svg',
-  '/icon-192.png',
-  '/icon-512.png'
+  '/favicon.svg',
+  '/web-app-manifest-192x192.png',
+  '/web-app-manifest-512x512.png'
 ];
 
 // Install service worker and cache assets

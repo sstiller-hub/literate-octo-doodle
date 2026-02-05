@@ -6,10 +6,14 @@ import { createClient } from "jsr:@supabase/supabase-js@2";
 
 const app = new Hono();
 
-// Initialize Supabase client
-const supabase = createClient(
-  Deno.env.get('SUPABASE_URL') ?? '',
-  Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
+const SUPABASE_URL = Deno.env.get('SUPABASE_URL') ?? '';
+const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '';
+const SUPABASE_ANON_KEY = Deno.env.get('SUPABASE_ANON_KEY') ?? '';
+
+// Admin client for storage and privileged operations
+const supabaseAdmin = createClient(
+  SUPABASE_URL,
+  SUPABASE_SERVICE_ROLE_KEY,
 );
 
 // Storage bucket name for progress pictures
@@ -18,11 +22,11 @@ const BUCKET_NAME = 'make-84ed1a00-progress-pics';
 // Initialize storage bucket on startup
 async function initializeBucket() {
   try {
-    const { data: buckets } = await supabase.storage.listBuckets();
+    const { data: buckets } = await supabaseAdmin.storage.listBuckets();
     const bucketExists = buckets?.some(bucket => bucket.name === BUCKET_NAME);
     
     if (!bucketExists) {
-      const { error } = await supabase.storage.createBucket(BUCKET_NAME, {
+      const { error } = await supabaseAdmin.storage.createBucket(BUCKET_NAME, {
         public: false,
         fileSizeLimit: 10485760, // 10MB
       });
@@ -41,6 +45,89 @@ async function initializeBucket() {
 
 // Initialize bucket
 initializeBucket();
+
+const createUserClient = (authHeader: string) => {
+  return createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+    global: {
+      headers: {
+        Authorization: authHeader,
+      },
+    },
+  });
+};
+
+const requireUser = async (c: any) => {
+  const authHeader = c.req.header("Authorization");
+  if (!authHeader) {
+    return { error: c.json({ error: "Unauthorized" }, 401) };
+  }
+
+  const supabase = createUserClient(authHeader);
+  const { data, error } = await supabase.auth.getUser();
+  if (error || !data?.user) {
+    return { error: c.json({ error: "Unauthorized" }, 401) };
+  }
+
+  return { supabase, user: data.user };
+};
+
+const mapDailyRow = (row: any, userId: string) => ({
+  user_id: userId,
+  date: row.date,
+  recovery: row.recovery ?? null,
+  feeling: row.feeling ?? null,
+  sleep: row.sleep ?? null,
+  hrv: row.hrv ?? null,
+  resting_hr: row.restingHR ?? row.resting_hr ?? null,
+  active_minutes: row.activeMinutes ?? row.active_minutes ?? null,
+  steps: row.steps ?? null,
+  weight: row.weight ?? null,
+  strain: row.strain ?? null,
+  active_energy: row.activeEnergy ?? row.active_energy ?? null,
+  note: row.note ?? null,
+});
+
+const mapDailyResponse = (row: any) => ({
+  date: row.date,
+  recovery: row.recovery,
+  feeling: row.feeling,
+  sleep: row.sleep,
+  hrv: row.hrv,
+  restingHR: row.resting_hr,
+  activeMinutes: row.active_minutes,
+  steps: row.steps,
+  weight: row.weight,
+  strain: row.strain,
+  activeEnergy: row.active_energy,
+  note: row.note ?? undefined,
+});
+
+const generateWeeklyData = (dailyData: any[]) => {
+  const weeks = [];
+  if (dailyData.length === 0) return weeks;
+
+  for (let i = 0; i < dailyData.length; i += 7) {
+    const chunk = dailyData.slice(i, i + 7);
+    if (chunk.length === 0) continue;
+
+    const avg = (values: number[]) =>
+      values.reduce((a, b) => a + b, 0) / values.length;
+
+    weeks.push({
+      week: `Week ${weeks.length + 1}`,
+      recovery: Math.round(avg(chunk.map(d => d.recovery ?? 0))),
+      strain: Math.round(avg(chunk.map(d => d.strain ?? 0)) * 10) / 10,
+      sleep: Math.round(avg(chunk.map(d => d.sleep ?? 0)) * 10) / 10,
+      hrv: Math.round(avg(chunk.map(d => d.hrv ?? 0))),
+      restingHR: Math.round(avg(chunk.map(d => d.restingHR ?? 0))),
+      activeMinutes: Math.round(avg(chunk.map(d => d.activeMinutes ?? 0))),
+      steps: Math.round(avg(chunk.map(d => d.steps ?? 0))),
+      weight: Math.round(avg(chunk.map(d => d.weight ?? 0)) * 10) / 10,
+    });
+  }
+
+  return weeks;
+};
 
 // Enable logger
 app.use('*', logger(console.log));
@@ -65,21 +152,71 @@ app.get("/make-server-84ed1a00/health", (c) => {
 // Upload health data from JSON
 app.post("/make-server-84ed1a00/health-data/upload", async (c) => {
   try {
+    const auth = await requireUser(c);
+    if (auth.error) return auth.error;
+
+    const { supabase, user } = auth;
     const data = await c.req.json();
-    
-    // Store weekly aggregated data
-    if (data.weekly) {
-      await kv.set('health:weekly', JSON.stringify(data.weekly));
+
+    if (!data?.daily || !Array.isArray(data.daily)) {
+      return c.json({ success: false, error: "Daily data array required" }, 400);
     }
-    
-    // Also store raw daily data if provided
-    if (data.daily) {
-      await kv.set('health:daily', JSON.stringify(data.daily));
+
+    const rows = data.daily.map((row: any) => mapDailyRow(row, user.id));
+    const { error } = await supabase
+      .from("daily_metrics")
+      .upsert(rows, { onConflict: "user_id,date" });
+
+    if (error) {
+      console.log("Error saving daily metrics:", error);
+      return c.json({ success: false, error: error.message }, 500);
     }
-    
-    return c.json({ success: true, message: 'Health data uploaded successfully' });
+
+    return c.json({
+      success: true,
+      message: "Health data uploaded successfully",
+      count: rows.length,
+    });
   } catch (error) {
     console.log(`Error uploading health data: ${error}`);
+    return c.json({ success: false, error: String(error) }, 500);
+  }
+});
+
+// One-time migration from KV store to user tables
+app.post("/make-server-84ed1a00/migrate-kv", async (c) => {
+  try {
+    const auth = await requireUser(c);
+    if (auth.error) return auth.error;
+
+    const { supabase, user } = auth;
+    const dailyData = await kv.get('health:daily');
+
+    if (!dailyData) {
+      return c.json({ success: true, migrated: 0 });
+    }
+
+    let daily = [];
+    try {
+      daily = JSON.parse(dailyData);
+    } catch (e) {
+      console.log('Error parsing KV daily data:', e);
+      return c.json({ success: false, error: 'Invalid KV data' }, 400);
+    }
+
+    const rows = daily.map((row: any) => mapDailyRow(row, user.id));
+    const { error } = await supabase
+      .from("daily_metrics")
+      .upsert(rows, { onConflict: "user_id,date" });
+
+    if (error) {
+      console.log("Error migrating KV data:", error);
+      return c.json({ success: false, error: error.message }, 500);
+    }
+
+    return c.json({ success: true, migrated: rows.length });
+  } catch (error) {
+    console.log(`Error migrating KV data: ${error}`);
     return c.json({ success: false, error: String(error) }, 500);
   }
 });
@@ -87,29 +224,25 @@ app.post("/make-server-84ed1a00/health-data/upload", async (c) => {
 // Get performance data (weekly aggregations)
 app.get("/make-server-84ed1a00/performance-data", async (c) => {
   try {
+    const auth = await requireUser(c);
+    if (auth.error) return auth.error;
+
+    const { supabase, user } = auth;
     const timeHorizon = c.req.query('timeHorizon') || 'week';
-    
-    const weeklyData = await kv.get('health:weekly');
-    const dailyData = await kv.get('health:daily');
-    
-    let weekly = [];
-    let daily = [];
-    
-    if (weeklyData) {
-      try {
-        weekly = JSON.parse(weeklyData);
-      } catch (e) {
-        console.log('Error parsing weekly data:', e);
-      }
+
+    const { data: dailyRows, error } = await supabase
+      .from("daily_metrics")
+      .select("*")
+      .eq("user_id", user.id)
+      .order("date", { ascending: true });
+
+    if (error) {
+      console.log("Error fetching daily metrics:", error);
+      return c.json({ error: error.message }, 500);
     }
-    
-    if (dailyData) {
-      try {
-        daily = JSON.parse(dailyData);
-      } catch (e) {
-        console.log('Error parsing daily data:', e);
-      }
-    }
+
+    const daily = (dailyRows || []).map(mapDailyResponse);
+    let weekly = generateWeeklyData(daily);
     
     // Filter based on time horizon
     let filteredWeekly = weekly;
@@ -134,57 +267,36 @@ app.get("/make-server-84ed1a00/performance-data", async (c) => {
 // Save daily feeling check-in
 app.post("/make-server-84ed1a00/save-feeling", async (c) => {
   try {
+    const auth = await requireUser(c);
+    if (auth.error) return auth.error;
+
+    const { supabase, user } = auth;
     const { date, feeling, note } = await c.req.json();
     
     if (!date || !feeling) {
       return c.json({ success: false, error: 'Date and feeling are required' }, 400);
     }
-    
-    // Get existing daily data
-    const dailyData = await kv.get('health:daily');
-    let daily = [];
-    
-    if (dailyData) {
-      try {
-        daily = JSON.parse(dailyData);
-      } catch (e) {
-        console.log('Error parsing daily data:', e);
-      }
+
+    const { error } = await supabase
+      .from("daily_metrics")
+      .upsert(
+        {
+          user_id: user.id,
+          date,
+          feeling,
+          note: note || null,
+        },
+        { onConflict: "user_id,date" },
+      );
+
+    if (error) {
+      console.log("Error saving feeling:", error);
+      return c.json({ success: false, error: error.message }, 500);
     }
-    
-    // Find existing entry for this date or create new one
-    const existingIndex = daily.findIndex(d => d.date === date);
-    
-    if (existingIndex >= 0) {
-      // Update existing entry
-      daily[existingIndex].feeling = feeling;
-      if (note) {
-        daily[existingIndex].note = note;
-      }
-    } else {
-      // Create new entry with minimal data
-      daily.push({
-        date,
-        feeling,
-        note: note || '',
-        recovery: 0,
-        sleep: 0,
-        hrv: 0,
-        restingHR: 0,
-        activeMinutes: 0,
-        steps: 0
-      });
-    }
-    
-    // Sort by date
-    daily.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
-    
-    // Save back to KV store
-    await kv.set('health:daily', JSON.stringify(daily));
-    
-    return c.json({ 
-      success: true, 
-      message: 'Feeling saved successfully' 
+
+    return c.json({
+      success: true,
+      message: 'Feeling saved successfully'
     });
   } catch (error) {
     console.log(`Error saving feeling: ${error}`);
@@ -195,31 +307,26 @@ app.post("/make-server-84ed1a00/save-feeling", async (c) => {
 // AI chat endpoint - analyze performance trends
 app.post("/make-server-84ed1a00/ai-chat", async (c) => {
   try {
+    const auth = await requireUser(c);
+    if (auth.error) return auth.error;
+
+    const { supabase, user } = auth;
     const { message } = await c.req.json();
-    
-    // Get weekly and daily performance data
-    const weeklyData = await kv.get('health:weekly');
-    const dailyData = await kv.get('health:daily');
-    
-    let weekly = [];
-    let daily = [];
-    
-    if (weeklyData) {
-      try {
-        weekly = JSON.parse(weeklyData);
-      } catch (e) {
-        console.log('Error parsing weekly data:', e);
-      }
+
+    const { data: dailyRows, error } = await supabase
+      .from("daily_metrics")
+      .select("*")
+      .eq("user_id", user.id)
+      .order("date", { ascending: true });
+
+    if (error) {
+      console.log("Error fetching daily metrics for chat:", error);
+      return c.json({ error: error.message }, 500);
     }
-    
-    if (dailyData) {
-      try {
-        daily = JSON.parse(dailyData);
-      } catch (e) {
-        console.log('Error parsing daily data:', e);
-      }
-    }
-    
+
+    const daily = (dailyRows || []).map(mapDailyResponse);
+    const weekly = generateWeeklyData(daily);
+
     // Generate AI response based on trends
     const response = generatePerformanceResponse(message, weekly, daily);
     
@@ -233,16 +340,22 @@ app.post("/make-server-84ed1a00/ai-chat", async (c) => {
 // Generate performance insights
 app.get("/make-server-84ed1a00/insights", async (c) => {
   try {
-    const dailyData = await kv.get('health:daily');
-    
-    let daily = [];
-    if (dailyData) {
-      try {
-        daily = JSON.parse(dailyData);
-      } catch (e) {
-        console.log('Error parsing daily data:', e);
-      }
+    const auth = await requireUser(c);
+    if (auth.error) return auth.error;
+
+    const { supabase, user } = auth;
+    const { data: dailyRows, error } = await supabase
+      .from("daily_metrics")
+      .select("*")
+      .eq("user_id", user.id)
+      .order("date", { ascending: true });
+
+    if (error) {
+      console.log("Error fetching daily metrics for insights:", error);
+      return c.json({ error: error.message }, 500);
     }
+
+    const daily = (dailyRows || []).map(mapDailyResponse);
     
     const insights = generatePerformanceInsights(daily);
     
@@ -732,6 +845,10 @@ function generatePerformanceInsights(dailyData: any[]): Array<{
 // Upload progress picture
 app.post("/make-server-84ed1a00/progress-picture/upload", async (c) => {
   try {
+    const auth = await requireUser(c);
+    if (auth.error) return auth.error;
+
+    const { supabase, user } = auth;
     const formData = await c.req.formData();
     const file = formData.get('file') as File;
     const date = formData.get('date') as string;
@@ -760,7 +877,7 @@ app.post("/make-server-84ed1a00/progress-picture/upload", async (c) => {
     const fileBuffer = new Uint8Array(arrayBuffer);
     
     // Upload to Supabase Storage
-    const { data, error } = await supabase.storage
+    const { error } = await supabaseAdmin.storage
       .from(BUCKET_NAME)
       .upload(fileName, fileBuffer, {
         contentType: file.type,
@@ -772,35 +889,33 @@ app.post("/make-server-84ed1a00/progress-picture/upload", async (c) => {
       return c.json({ success: false, error: error.message }, 500);
     }
     
-    // Store metadata in KV store
-    const picturesData = await kv.get('health:progress-pictures');
-    let pictures = [];
-    if (picturesData) {
-      try {
-        pictures = JSON.parse(picturesData);
-      } catch (e) {
-        console.log('Error parsing pictures data:', e);
-      }
+    const { data: inserted, error: insertError } = await supabase
+      .from("progress_pictures")
+      .insert({
+        user_id: user.id,
+        date,
+        notes,
+        view,
+        storage_path: fileName,
+      })
+      .select("*")
+      .single();
+
+    if (insertError) {
+      console.log("Error saving progress picture metadata:", insertError);
+      return c.json({ success: false, error: insertError.message }, 500);
     }
-    
-    pictures.push({
-      id: fileName,
-      date: date,
-      notes: notes,
-      view: view,
-      fileName: fileName,
-      uploadedAt: new Date().toISOString()
-    });
-    
-    // Sort by date descending
-    pictures.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-    
-    await kv.set('health:progress-pictures', JSON.stringify(pictures));
-    
-    return c.json({ 
-      success: true, 
+
+    return c.json({
+      success: true,
       message: 'Progress picture uploaded successfully',
-      picture: { id: fileName, date, notes, view }
+      picture: {
+        id: inserted.id,
+        date: inserted.date,
+        notes: inserted.notes,
+        view: inserted.view,
+        uploadedAt: inserted.created_at,
+      },
     });
   } catch (error) {
     console.log(`Error uploading progress picture: ${error}`);
@@ -811,33 +926,43 @@ app.post("/make-server-84ed1a00/progress-picture/upload", async (c) => {
 // Get all progress pictures
 app.get("/make-server-84ed1a00/progress-pictures", async (c) => {
   try {
-    const picturesData = await kv.get('health:progress-pictures');
-    let pictures = [];
-    
-    if (picturesData) {
-      try {
-        pictures = JSON.parse(picturesData);
-      } catch (e) {
-        console.log('Error parsing pictures data:', e);
-      }
+    const auth = await requireUser(c);
+    if (auth.error) return auth.error;
+
+    const { supabase, user } = auth;
+    const { data: pictures, error } = await supabase
+      .from("progress_pictures")
+      .select("*")
+      .eq("user_id", user.id)
+      .order("date", { ascending: false });
+
+    if (error) {
+      console.log("Error fetching progress pictures:", error);
+      return c.json({ error: error.message }, 500);
     }
-    
-    // Generate signed URLs for each picture (valid for 1 hour)
+
     const picturesWithUrls = await Promise.all(
-      pictures.map(async (pic) => {
-        const { data, error } = await supabase.storage
+      (pictures || []).map(async (pic) => {
+        const { data, error: urlError } = await supabaseAdmin.storage
           .from(BUCKET_NAME)
-          .createSignedUrl(pic.fileName, 3600);
-        
-        if (error) {
-          console.log('Error creating signed URL:', error);
-          return { ...pic, url: null };
+          .createSignedUrl(pic.storage_path, 3600);
+
+        if (urlError) {
+          console.log('Error creating signed URL:', urlError);
         }
-        
-        return { ...pic, url: data.signedUrl };
+
+        return {
+          id: pic.id,
+          date: pic.date,
+          notes: pic.notes || "",
+          view: pic.view,
+          fileName: pic.storage_path,
+          uploadedAt: pic.created_at,
+          url: urlError ? null : data.signedUrl,
+        };
       })
     );
-    
+
     return c.json({ pictures: picturesWithUrls });
   } catch (error) {
     console.log(`Error fetching progress pictures: ${error}`);
@@ -848,31 +973,37 @@ app.get("/make-server-84ed1a00/progress-pictures", async (c) => {
 // Delete progress picture
 app.delete("/make-server-84ed1a00/progress-picture/:id", async (c) => {
   try {
+    const auth = await requireUser(c);
+    if (auth.error) return auth.error;
+
+    const { supabase, user } = auth;
     const id = c.req.param('id');
-    
-    // Remove from storage
-    const { error: storageError } = await supabase.storage
+
+    const { data: deleted, error } = await supabase
+      .from("progress_pictures")
+      .delete()
+      .eq("id", id)
+      .eq("user_id", user.id)
+      .select("*")
+      .maybeSingle();
+
+    if (error) {
+      console.log("Error deleting progress picture:", error);
+      return c.json({ success: false, error: error.message }, 500);
+    }
+
+    if (!deleted) {
+      return c.json({ success: false, error: "Not found" }, 404);
+    }
+
+    const { error: storageError } = await supabaseAdmin.storage
       .from(BUCKET_NAME)
-      .remove([id]);
-    
+      .remove([deleted.storage_path]);
+
     if (storageError) {
       console.log('Error deleting file from storage:', storageError);
     }
-    
-    // Remove from KV store
-    const picturesData = await kv.get('health:progress-pictures');
-    let pictures = [];
-    if (picturesData) {
-      try {
-        pictures = JSON.parse(picturesData);
-      } catch (e) {
-        console.log('Error parsing pictures data:', e);
-      }
-    }
-    
-    pictures = pictures.filter(pic => pic.id !== id);
-    await kv.set('health:progress-pictures', JSON.stringify(pictures));
-    
+
     return c.json({ success: true, message: 'Progress picture deleted successfully' });
   } catch (error) {
     console.log(`Error deleting progress picture: ${error}`);

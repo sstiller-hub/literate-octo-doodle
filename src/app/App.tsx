@@ -30,7 +30,8 @@ import {
 } from "lucide-react";
 import { Toaster } from "@/app/components/ui/sonner";
 import { toast } from "sonner";
-import { projectId, publicAnonKey } from "/utils/supabase/info";
+import { functionsBaseUrl, supabase } from "@/app/utils/supabase/client";
+import type { Session } from "@supabase/supabase-js";
 import {
   Select,
   SelectContent,
@@ -44,6 +45,7 @@ import {
   PopoverTrigger,
 } from "@/app/components/ui/popover";
 import { generateDemoHealthData } from "@/app/utils/demo-data";
+import { Button } from "@/app/components/ui/button";
 
 // Generate 90 days of realistic demo data
 const generatedDailyData = generateDemoHealthData(90);
@@ -74,6 +76,31 @@ const dummyWeeklySummary = {
 };
 
 export default function App() {
+  const [session, setSession] = useState<Session | null>(null);
+  const [authLoading, setAuthLoading] = useState(true);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    supabase.auth.getSession().then(({ data }) => {
+      if (!isMounted) return;
+      setSession(data.session ?? null);
+      setAuthLoading(false);
+    });
+
+    const { data: subscription } = supabase.auth.onAuthStateChange(
+      (_event, nextSession) => {
+        setSession(nextSession);
+        setAuthLoading(false);
+      },
+    );
+
+    return () => {
+      isMounted = false;
+      subscription?.subscription.unsubscribe();
+    };
+  }, []);
+
   // Detect day of week for context-aware defaults
   const today = new Date();
   const dayOfWeek = today.getDay(); // 0 = Sunday, 6 = Saturday
@@ -113,17 +140,19 @@ export default function App() {
 
   // Load performance data and insights on mount
   useEffect(() => {
+    if (!session) return;
     loadPerformanceData();
     loadInsights();
-  }, [timeHorizon]);
+  }, [session, timeHorizon]);
 
   const loadPerformanceData = async () => {
+    if (!session || !functionsBaseUrl) return;
     try {
       const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/make-server-84ed1a00/performance-data?timeHorizon=${timeHorizon}`,
+        `${functionsBaseUrl}/performance-data?timeHorizon=${timeHorizon}`,
         {
           headers: {
-            Authorization: `Bearer ${publicAnonKey}`,
+            Authorization: `Bearer ${session.access_token}`,
           },
         },
       );
@@ -142,12 +171,13 @@ export default function App() {
   };
 
   const loadInsights = async () => {
+    if (!session || !functionsBaseUrl) return;
     try {
       const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/make-server-84ed1a00/insights`,
+        `${functionsBaseUrl}/insights`,
         {
           headers: {
-            Authorization: `Bearer ${publicAnonKey}`,
+            Authorization: `Bearer ${session.access_token}`,
           },
         },
       );
@@ -169,14 +199,17 @@ export default function App() {
   const handleSendMessage = async (
     message: string,
   ): Promise<string> => {
+    if (!session || !functionsBaseUrl) {
+      throw new Error("Not authenticated");
+    }
     try {
       const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/make-server-84ed1a00/ai-chat`,
+        `${functionsBaseUrl}/ai-chat`,
         {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
-            Authorization: `Bearer ${publicAnonKey}`,
+            Authorization: `Bearer ${session.access_token}`,
           },
           body: JSON.stringify({ message }),
         },
@@ -199,14 +232,18 @@ export default function App() {
     note: string,
     date: string,
   ) => {
+    if (!session || !functionsBaseUrl) {
+      toast.error("Please sign in first");
+      return;
+    }
     try {
       const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/make-server-84ed1a00/save-feeling`,
+        `${functionsBaseUrl}/save-feeling`,
         {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
-            Authorization: `Bearer ${publicAnonKey}`,
+            Authorization: `Bearer ${session.access_token}`,
           },
           body: JSON.stringify({ date, feeling, note }),
         },
@@ -229,6 +266,45 @@ export default function App() {
     setActiveTab('chat');
     setAiChatInitialPrompt(`Tell me more about this: ${insightText}`);
   };
+
+  const handleSignIn = async () => {
+    await supabase.auth.signInWithOAuth({
+      provider: "google",
+      options: {
+        redirectTo: window.location.origin,
+      },
+    });
+  };
+
+  const handleSignOut = async () => {
+    await supabase.auth.signOut();
+  };
+
+  if (authLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background">
+        <div className="text-sm text-muted-foreground">Loading…</div>
+      </div>
+    );
+  }
+
+  if (!session) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background p-6">
+        <div className="w-full max-w-md rounded-xl border border-border bg-card p-6 shadow-sm">
+          <h1 className="text-xl font-semibold text-foreground">
+            Sign in to continue
+          </h1>
+          <p className="mt-2 text-sm text-muted-foreground">
+            Your data is private. Sign in with Google to access your dashboard.
+          </p>
+          <Button className="mt-6 w-full" onClick={handleSignIn}>
+            Continue with Google
+          </Button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-background">
@@ -310,6 +386,27 @@ export default function App() {
                     </button>
                   </div>
                 </div>
+
+                {/* Divider */}
+                <div className="border-t" />
+
+                {/* Section: Account */}
+                <div>
+                  <div className="px-3 py-1.5">
+                    <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/60">
+                      Account
+                    </p>
+                  </div>
+                  <div className="space-y-0.5">
+                    <button
+                      onClick={handleSignOut}
+                      className="w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-muted rounded-md transition-colors"
+                    >
+                      <Info className="size-4" />
+                      Sign Out
+                    </button>
+                  </div>
+                </div>
               </div>
             </PopoverContent>
           </Popover>
@@ -385,6 +482,7 @@ export default function App() {
               <>
                 <FileUpload
                   onUploadSuccess={handleUploadSuccess}
+                  authToken={session.access_token}
                 />
 
                 <div className="mt-4 p-4 bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-900 rounded-lg">
@@ -764,7 +862,7 @@ export default function App() {
           </TabsContent>
 
           <TabsContent value="pictures" className="mt-0">
-            <ProgressPictures />
+            <ProgressPictures authToken={session.access_token} />
           </TabsContent>
 
           <TabsContent value="chat" className="mt-0">

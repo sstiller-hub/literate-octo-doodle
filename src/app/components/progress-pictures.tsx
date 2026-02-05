@@ -4,9 +4,9 @@ import { Input } from "@/app/components/ui/input";
 import { Textarea } from "@/app/components/ui/textarea";
 import { Camera, Upload, Trash2, Plus, ArrowRight, Calendar } from "lucide-react";
 import { toast } from "sonner";
-import { projectId, publicAnonKey } from '/utils/supabase/info';
 import { CameraCapture } from "@/app/components/camera-capture";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/app/components/ui/dialog";
+import { functionsBaseUrl } from "@/app/utils/supabase/client";
 
 interface ProgressPicture {
   id: string;
@@ -20,9 +20,10 @@ interface ProgressPicture {
 
 interface ProgressPicturesProps {
   onUploadSuccess?: () => void;
+  authToken: string;
 }
 
-export function ProgressPictures({ onUploadSuccess }: ProgressPicturesProps) {
+export function ProgressPictures({ onUploadSuccess, authToken }: ProgressPicturesProps) {
   const [pictures, setPictures] = useState<ProgressPicture[]>([]);
   const [isUploading, setIsUploading] = useState(false);
   const [showUploadDialog, setShowUploadDialog] = useState(false);
@@ -52,10 +53,10 @@ export function ProgressPictures({ onUploadSuccess }: ProgressPicturesProps) {
   const loadPictures = async () => {
     try {
       const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/make-server-84ed1a00/progress-pictures`,
+        `${functionsBaseUrl}/progress-pictures`,
         {
           headers: {
-            'Authorization': `Bearer ${publicAnonKey}`
+            'Authorization': `Bearer ${authToken}`
           }
         }
       );
@@ -123,11 +124,11 @@ export function ProgressPictures({ onUploadSuccess }: ProgressPicturesProps) {
       formData.append('view', selectedView);
 
       const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/make-server-84ed1a00/progress-picture/upload`,
+        `${functionsBaseUrl}/progress-picture/upload`,
         {
           method: 'POST',
           headers: {
-            'Authorization': `Bearer ${publicAnonKey}`
+            'Authorization': `Bearer ${authToken}`
           },
           body: formData
         }
@@ -170,11 +171,11 @@ export function ProgressPictures({ onUploadSuccess }: ProgressPicturesProps) {
 
     try {
       const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/make-server-84ed1a00/progress-picture/${id}`,
+        `${functionsBaseUrl}/progress-picture/${id}`,
         {
           method: 'DELETE',
           headers: {
-            'Authorization': `Bearer ${publicAnonKey}`
+            'Authorization': `Bearer ${authToken}`
           }
         }
       );
