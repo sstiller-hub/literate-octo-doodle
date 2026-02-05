@@ -311,7 +311,7 @@ export default function App() {
       <Toaster />
 
       {/* Sticky Header */}
-      <header className="sticky top-0 z-10 pt-4 pb-2 px-4">
+      <header className="sticky top-0 z-10 pb-2 px-4 pt-[calc(1rem+env(safe-area-inset-top))]">
         <div className="flex items-center justify-between w-full">
           <div className="inline-flex items-center gap-2 px-4 py-2 bg-primary/10 rounded-full border border-primary/20">
             <Activity className="size-5 text-primary" />
