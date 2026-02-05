@@ -25,6 +25,40 @@ interface ReadinessViewProps {
   onExpandAIChat?: (context: string) => void;
 }
 
+const clamp = (value: number, min: number, max: number) =>
+  Math.min(max, Math.max(min, value));
+
+const deriveReadiness = (
+  sleep?: number,
+  hrv?: number,
+  restingHR?: number,
+) => {
+  if (!Number.isFinite(sleep) || !Number.isFinite(hrv) || !Number.isFinite(restingHR)) {
+    return null;
+  }
+
+  const baseRecovery = 60;
+  const recovery =
+    baseRecovery +
+    (hrv - 50) * 0.8 +
+    (8 - restingHR / 10) * 2 +
+    (sleep - 7) * 8;
+
+  return Math.round(clamp(recovery, 20, 95));
+};
+
+const getReadinessValue = (d: DailyData) => {
+  if (Number.isFinite(d.recovery)) return d.recovery;
+  const derived = deriveReadiness(d.sleep, d.hrv, d.restingHR);
+  return derived ?? NaN;
+};
+
+const average = (values: number[]) => {
+  const nums = values.filter((v) => Number.isFinite(v));
+  if (nums.length === 0) return NaN;
+  return nums.reduce((sum, v) => sum + v, 0) / nums.length;
+};
+
 // Calculate 7-day rolling average
 function calculateRollingAverage(data: DailyData[], days: number = 7) {
   if (data.length < days) return [];
@@ -35,11 +69,11 @@ function calculateRollingAverage(data: DailyData[], days: number = 7) {
     
     result.push({
       date: data[i].date,
-      readiness: window.reduce((sum, d) => sum + d.recovery, 0) / days,
-      sleep: window.reduce((sum, d) => sum + d.sleep, 0) / days,
-      hrv: window.reduce((sum, d) => sum + d.hrv, 0) / days,
-      restingHR: window.reduce((sum, d) => sum + d.restingHR, 0) / days,
-      feeling: window.reduce((sum, d) => sum + (d.feeling || 3), 0) / days,
+      readiness: average(window.map(getReadinessValue)),
+      sleep: average(window.map((d) => d.sleep)),
+      hrv: average(window.map((d) => d.hrv)),
+      restingHR: average(window.map((d) => d.restingHR)),
+      feeling: average(window.map((d) => d.feeling || 3)),
     });
   }
   
@@ -52,7 +86,7 @@ export function ReadinessView({ data, viewMode, daysToShow = 30, onExpandAIChat 
     ? calculateRollingAverage(data, 7)
     : data.map(d => ({
         date: d.date,
-        readiness: d.recovery,
+        readiness: getReadinessValue(d),
         sleep: d.sleep,
         hrv: d.hrv,
         restingHR: d.restingHR,
@@ -77,11 +111,20 @@ export function ReadinessView({ data, viewMode, daysToShow = 30, onExpandAIChat 
   const previous = filteredData.length > 1 ? filteredData[filteredData.length - 2] : null;
   const weekAgo = filteredData.length > 7 ? filteredData[filteredData.length - 8] : null;
 
-  const readiness = Math.round(current.readiness);
-  const change = previous ? readiness - Math.round(previous.readiness) : 0;
+  const readiness = Number.isFinite(current.readiness)
+    ? Math.round(current.readiness)
+    : null;
+  const change =
+    previous && readiness != null && Number.isFinite(previous.readiness)
+      ? readiness - Math.round(previous.readiness)
+      : 0;
 
   // Daily Takeaway - Decision surface, explicitly prescriptive
   const getDailyTakeaway = () => {
+    if (!Number.isFinite(current.readiness)) {
+      return "Readiness unavailable. Add sleep, HRV, and resting HR to generate recovery.";
+    }
+
     const readiness = Math.round(current.readiness);
     const sleep = current.sleep;
     const hrv = Math.round(current.hrv);
@@ -168,6 +211,8 @@ export function ReadinessView({ data, viewMode, daysToShow = 30, onExpandAIChat 
     const comparisonPoint = viewMode === 'rolling' ? weekAgo : previous;
     if (!comparisonPoint) return null;
 
+    if (!Number.isFinite(comparisonPoint.readiness) || readiness == null) return null;
+
     const comparisonReadiness = Math.round(comparisonPoint.readiness);
     const readinessChange = Math.abs(readiness - comparisonReadiness);
     const signedChange = readiness - comparisonReadiness;
@@ -243,19 +288,32 @@ export function ReadinessView({ data, viewMode, daysToShow = 30, onExpandAIChat 
     if (!prior7Days || prior7Days.length < 7) return null;
 
     // Calculate averages for comparison windows
-    const recentAvgSleep = last7Days.reduce((sum, d) => sum + d.sleep, 0) / 7;
-    const priorAvgSleep = prior7Days.reduce((sum, d) => sum + d.sleep, 0) / 7;
+    const recentAvgSleep = average(last7Days.map((d) => d.sleep));
+    const priorAvgSleep = average(prior7Days.map((d) => d.sleep));
     
-    const recentAvgHRV = last7Days.reduce((sum, d) => sum + d.hrv, 0) / 7;
-    const priorAvgHRV = prior7Days.reduce((sum, d) => sum + d.hrv, 0) / 7;
+    const recentAvgHRV = average(last7Days.map((d) => d.hrv));
+    const priorAvgHRV = average(prior7Days.map((d) => d.hrv));
     
-    const recentAvgRHR = last7Days.reduce((sum, d) => sum + d.restingHR, 0) / 7;
-    const priorAvgRHR = prior7Days.reduce((sum, d) => sum + d.restingHR, 0) / 7;
+    const recentAvgRHR = average(last7Days.map((d) => d.restingHR));
+    const priorAvgRHR = average(prior7Days.map((d) => d.restingHR));
     
-    const recentAvgReadiness = last7Days.reduce((sum, d) => sum + d.readiness, 0) / 7;
-    const priorAvgReadiness = prior7Days.reduce((sum, d) => sum + d.readiness, 0) / 7;
+    const recentAvgReadiness = average(last7Days.map((d) => d.readiness));
+    const priorAvgReadiness = average(prior7Days.map((d) => d.readiness));
 
     // Detect behavior changes (input)
+    if (
+      !Number.isFinite(recentAvgSleep) ||
+      !Number.isFinite(priorAvgSleep) ||
+      !Number.isFinite(recentAvgHRV) ||
+      !Number.isFinite(priorAvgHRV) ||
+      !Number.isFinite(recentAvgRHR) ||
+      !Number.isFinite(priorAvgRHR) ||
+      !Number.isFinite(recentAvgReadiness) ||
+      !Number.isFinite(priorAvgReadiness)
+    ) {
+      return null;
+    }
+
     const sleepChange = recentAvgSleep - priorAvgSleep;
     const hrvChange = recentAvgHRV - priorAvgHRV;
     const rhrChange = recentAvgRHR - priorAvgRHR;
@@ -436,16 +494,19 @@ export function ReadinessView({ data, viewMode, daysToShow = 30, onExpandAIChat 
   };
 
   // Calculate average readiness for the period
-  const avgReadiness = filteredData.reduce((sum, d) => sum + d.readiness, 0) / filteredData.length;
+  const avgReadiness = average(filteredData.map((d) => d.readiness));
 
   // Find highest and lowest points
-  const sorted = [...filteredData].sort((a, b) => a.readiness - b.readiness);
+  const sorted = filteredData
+    .filter((d) => Number.isFinite(d.readiness))
+    .slice()
+    .sort((a, b) => a.readiness - b.readiness);
   const lowest = sorted[0];
   const highest = sorted[sorted.length - 1];
 
   // Determine insight based on trend
   const getInsight = () => {
-    if (!weekAgo) return null;
+    if (!weekAgo || readiness == null || !Number.isFinite(weekAgo.readiness)) return null;
     
     const weekChange = readiness - Math.round(weekAgo.readiness);
     const sleepChange = current.sleep - weekAgo.sleep;
@@ -458,6 +519,7 @@ export function ReadinessView({ data, viewMode, daysToShow = 30, onExpandAIChat 
       }
       return `Readiness declining. Consider a recovery day or reduced intensity.`;
     } else {
+      if (!Number.isFinite(avgReadiness)) return `Readiness stable. Maintain current training load.`;
       return `Readiness stable around ${Math.round(avgReadiness)}%. Maintain current training load.`;
     }
   };
@@ -499,26 +561,38 @@ export function ReadinessView({ data, viewMode, daysToShow = 30, onExpandAIChat 
                 <div>
                   <p className="text-sm text-muted-foreground">Readiness</p>
                   <div className="flex items-baseline gap-2">
-                    <span className="text-2xl font-semibold">{readiness}%</span>
-                    {change !== 0 && (
+                    <span className="text-2xl font-semibold">
+                      {readiness != null ? `${readiness}%` : "--"}
+                    </span>
+                    {readiness != null && change !== 0 && (
                       <span className={`text-sm ${change > 0 ? 'text-green-600' : 'text-red-600'}`}>
                         {change > 0 ? '+' : ''}{change}%
                       </span>
                     )}
                   </div>
                 </div>
-                <ReadinessExplainer
-                  readiness={readiness}
-                  sleep={current.sleep}
-                  hrv={Math.round(current.hrv)}
-                  restingHR={Math.round(current.restingHR)}
-                  previousReadiness={previous ? Math.round(previous.readiness) : undefined}
-                />
+                {readiness != null && (
+                  <ReadinessExplainer
+                    readiness={readiness}
+                    sleep={current.sleep}
+                    hrv={Math.round(current.hrv)}
+                    restingHR={Math.round(current.restingHR)}
+                    previousReadiness={
+                      previous && Number.isFinite(previous.readiness)
+                        ? Math.round(previous.readiness)
+                        : undefined
+                    }
+                  />
+                )}
               </div>
               <p className="text-sm text-muted-foreground">
-                {readiness >= 67 ? "Ready for high-intensity training" : 
-                 readiness >= 34 ? "Moderate training recommended" : 
-                 "Focus on recovery"}
+                {readiness == null
+                  ? "Readiness unavailable"
+                  : readiness >= 67
+                  ? "Ready for high-intensity training"
+                  : readiness >= 34
+                  ? "Moderate training recommended"
+                  : "Focus on recovery"}
               </p>
             </div>
 
@@ -668,7 +742,9 @@ export function ReadinessView({ data, viewMode, daysToShow = 30, onExpandAIChat 
             </div>
             <div className="text-right text-sm">
               <p className="text-[10px] uppercase tracking-wide text-muted-foreground/60">Context</p>
-              <p className="font-semibold">{Math.round(avgReadiness)}%</p>
+              <p className="font-semibold">
+                {Number.isFinite(avgReadiness) ? `${Math.round(avgReadiness)}%` : "--"}
+              </p>
               <p className="text-[9px] text-muted-foreground/60">period avg</p>
             </div>
           </div>
