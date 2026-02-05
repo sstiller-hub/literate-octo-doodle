@@ -27,10 +27,14 @@ export function ReadinessExplainer({
   previousReadiness,
   trigger 
 }: ReadinessExplainerProps) {
+  const safeSleep = Number.isFinite(sleep) ? sleep : null;
+  const safeHrv = Number.isFinite(hrv) ? hrv : null;
+  const safeRhr = Number.isFinite(restingHR) ? restingHR : null;
+
   // Calculate individual contributions
-  const sleepContribution = ((sleep - 7) * 8).toFixed(1);
-  const hrvContribution = ((hrv - 50) * 0.8).toFixed(1);
-  const rhrContribution = ((60 - restingHR) * 0.5).toFixed(1);
+  const sleepContribution = (safeSleep != null ? (safeSleep - 7) * 8 : 0).toFixed(1);
+  const hrvContribution = (safeHrv != null ? (safeHrv - 50) * 0.8 : 0).toFixed(1);
+  const rhrContribution = (safeRhr != null ? (60 - safeRhr) * 0.5 : 0).toFixed(1);
 
   const change = previousReadiness 
     ? readiness - previousReadiness 
@@ -101,11 +105,13 @@ export function ReadinessExplainer({
                   </div>
                   <div className="flex items-center gap-2">
                     {getTrendIcon(parseFloat(sleepContribution))}
-                    <span className="text-sm font-medium">{sleep.toFixed(1)}h</span>
+                    <span className="text-sm font-medium">
+                      {safeSleep != null ? `${safeSleep.toFixed(1)}h` : "--"}
+                    </span>
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
-                  <Progress value={Math.min(100, (sleep / 9) * 100)} className="h-1.5 flex-1" />
+                  <Progress value={safeSleep != null ? Math.min(100, (safeSleep / 9) * 100) : 0} className="h-1.5 flex-1" />
                   <span className={`text-xs font-medium w-12 text-right ${getContributionColor(sleepContribution)}`}>
                     {parseFloat(sleepContribution) > 0 ? '+' : ''}{sleepContribution}
                   </span>
@@ -124,11 +130,13 @@ export function ReadinessExplainer({
                   </div>
                   <div className="flex items-center gap-2">
                     {getTrendIcon(parseFloat(hrvContribution))}
-                    <span className="text-sm font-medium">{hrv}ms</span>
+                    <span className="text-sm font-medium">
+                      {safeHrv != null ? `${safeHrv}ms` : "--"}
+                    </span>
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
-                  <Progress value={Math.min(100, (hrv / 75) * 100)} className="h-1.5 flex-1" />
+                  <Progress value={safeHrv != null ? Math.min(100, (safeHrv / 75) * 100) : 0} className="h-1.5 flex-1" />
                   <span className={`text-xs font-medium w-12 text-right ${getContributionColor(hrvContribution)}`}>
                     {parseFloat(hrvContribution) > 0 ? '+' : ''}{hrvContribution}
                   </span>
@@ -147,11 +155,13 @@ export function ReadinessExplainer({
                   </div>
                   <div className="flex items-center gap-2">
                     {getTrendIcon(parseFloat(rhrContribution))}
-                    <span className="text-sm font-medium">{restingHR} bpm</span>
+                    <span className="text-sm font-medium">
+                      {safeRhr != null ? `${safeRhr} bpm` : "--"}
+                    </span>
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
-                  <Progress value={Math.min(100, ((75 - restingHR) / 25) * 100)} className="h-1.5 flex-1" />
+                  <Progress value={safeRhr != null ? Math.min(100, ((75 - safeRhr) / 25) * 100) : 0} className="h-1.5 flex-1" />
                   <span className={`text-xs font-medium w-12 text-right ${getContributionColor(rhrContribution)}`}>
                     {parseFloat(rhrContribution) > 0 ? '+' : ''}{rhrContribution}
                   </span>

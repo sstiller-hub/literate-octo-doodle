@@ -538,9 +538,14 @@ export function ReadinessView({ data, viewMode, daysToShow = 30, onExpandAIChat 
     const baselineWindow = processedData.slice(startIndex, endIndex);
     
     if (baselineWindow.length < 7) return null;
-    
-    const sum = baselineWindow.reduce((acc, d) => acc + d[metric], 0);
-    return sum / baselineWindow.length;
+
+    const values = baselineWindow
+      .map((d) => d[metric])
+      .filter((v) => Number.isFinite(v)) as number[];
+    if (values.length === 0) return null;
+
+    const sum = values.reduce((acc, v) => acc + v, 0);
+    return sum / values.length;
   };
 
   const sleepBaseline = calculateBaseline('sleep');
@@ -611,7 +616,7 @@ export function ReadinessView({ data, viewMode, daysToShow = 30, onExpandAIChat 
                   {safeSleep != null ? safeSleep.toFixed(1) : "--"}
                   <span className="text-sm font-normal text-muted-foreground">h</span>
                 </p>
-                {sleepBaseline && safeSleep != null && (
+                {Number.isFinite(sleepBaseline) && safeSleep != null && (
                   <div className="mt-1">
                     <div className="w-16 h-6 ml-auto">
                       <ResponsiveContainer width="100%" height="100%">
@@ -647,7 +652,7 @@ export function ReadinessView({ data, viewMode, daysToShow = 30, onExpandAIChat 
                   {safeHrv != null ? Math.round(safeHrv) : "--"}
                   <span className="text-sm font-normal text-muted-foreground">ms</span>
                 </p>
-                {hrvBaseline && safeHrv != null && (
+                {Number.isFinite(hrvBaseline) && safeHrv != null && (
                   <div className="mt-1">
                     <div className="w-16 h-6 ml-auto">
                       <ResponsiveContainer width="100%" height="100%">
@@ -683,7 +688,7 @@ export function ReadinessView({ data, viewMode, daysToShow = 30, onExpandAIChat 
                   {safeRhr != null ? Math.round(safeRhr) : "--"}
                   <span className="text-sm font-normal text-muted-foreground">bpm</span>
                 </p>
-                {rhrBaseline && safeRhr != null && (
+                {Number.isFinite(rhrBaseline) && safeRhr != null && (
                   <div className="mt-1">
                     <div className="w-16 h-6 ml-auto">
                       <ResponsiveContainer width="100%" height="100%">

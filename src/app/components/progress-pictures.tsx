@@ -24,6 +24,8 @@ interface ProgressPicturesProps {
 }
 
 export function ProgressPictures({ onUploadSuccess, authToken }: ProgressPicturesProps) {
+  const LOAD_LIMIT = 60;
+  const PREVIEW_LIMIT = 12;
   const [pictures, setPictures] = useState<ProgressPicture[]>([]);
   const [isUploading, setIsUploading] = useState(false);
   const [showUploadDialog, setShowUploadDialog] = useState(false);
@@ -69,7 +71,7 @@ export function ProgressPictures({ onUploadSuccess, authToken }: ProgressPicture
   const loadPictures = async () => {
     try {
       const response = await fetch(
-        `${functionsBaseUrl}/progress-pictures`,
+        `${functionsBaseUrl}/progress-pictures?limit=${LOAD_LIMIT}`,
         {
           headers: {
             'Authorization': `Bearer ${authToken}`
@@ -109,7 +111,7 @@ export function ProgressPictures({ onUploadSuccess, authToken }: ProgressPicture
 
     previewUrls.forEach((url) => URL.revokeObjectURL(url));
     setSelectedFiles(files);
-    setPreviewUrls(files.map((file) => URL.createObjectURL(file)));
+    setPreviewUrls(files.slice(0, PREVIEW_LIMIT).map((file) => URL.createObjectURL(file)));
   };
 
   const handleCameraCapture = (blob: Blob) => {
@@ -131,6 +133,7 @@ export function ProgressPictures({ onUploadSuccess, authToken }: ProgressPicture
     }
 
     setIsUploading(true);
+    setShowUploadDialog(false);
 
     try {
       let successCount = 0;
@@ -178,7 +181,6 @@ export function ProgressPictures({ onUploadSuccess, authToken }: ProgressPicture
       setSelectedFiles([]);
       setPreviewUrls([]);
       setNotes('');
-      setShowUploadDialog(false);
       if (fileInputRef.current) {
         fileInputRef.current.value = '';
       }
@@ -345,7 +347,8 @@ export function ProgressPictures({ onUploadSuccess, authToken }: ProgressPicture
 
             {/* Preview */}
             {previewUrls.length > 0 && (
-              <div className="grid grid-cols-3 gap-2">
+              <div className="space-y-1.5">
+                <div className="grid grid-cols-3 gap-2">
                 {previewUrls.map((url, idx) => (
                   <div key={url} className="relative w-full aspect-[3/4] bg-muted rounded-md overflow-hidden">
                     <img 
@@ -355,6 +358,12 @@ export function ProgressPictures({ onUploadSuccess, authToken }: ProgressPicture
                     />
                   </div>
                 ))}
+                </div>
+                {selectedFiles.length > PREVIEW_LIMIT && (
+                  <p className="text-[10px] text-muted-foreground">
+                    +{selectedFiles.length - PREVIEW_LIMIT} more selected
+                  </p>
+                )}
               </div>
             )}
 

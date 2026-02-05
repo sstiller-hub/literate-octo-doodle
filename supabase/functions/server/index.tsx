@@ -974,11 +974,20 @@ app.get("/make-server-84ed1a00/progress-pictures", async (c) => {
     if (auth.error) return auth.error;
 
     const { supabase, user } = auth;
+    const limitParam = c.req.query('limit');
+    const offsetParam = c.req.query('offset');
+    const limit = Math.min(
+      Math.max(Number(limitParam) || 60, 1),
+      200,
+    );
+    const offset = Math.max(Number(offsetParam) || 0, 0);
+
     const { data: pictures, error } = await supabase
       .from("progress_pictures")
       .select("*")
       .eq("user_id", user.id)
-      .order("date", { ascending: false });
+      .order("date", { ascending: false })
+      .range(offset, offset + limit - 1);
 
     if (error) {
       console.log("Error fetching progress pictures:", error);
