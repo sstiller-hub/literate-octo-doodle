@@ -306,7 +306,7 @@ export function ProgressPictures({ onUploadSuccess, authToken }: ProgressPicture
 
       {/* Upload Dialog */}
       <Dialog open={showUploadDialog} onOpenChange={setShowUploadDialog}>
-        <DialogContent className="max-w-sm">
+        <DialogContent className="max-w-sm max-h-[85vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="text-base">Add Photo</DialogTitle>
             <DialogDescription className="text-sm text-muted-foreground">
@@ -438,23 +438,25 @@ export function ProgressPictures({ onUploadSuccess, authToken }: ProgressPicture
             </div>
 
             {/* Actions */}
-            <div className="flex gap-2 pt-2">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setShowUploadDialog(false)}
-                className="flex-1 h-8 text-xs"
-              >
-                Cancel
-              </Button>
-              <Button
-                onClick={handleUpload}
-                disabled={selectedFiles.length === 0 || isUploading}
-                size="sm"
-                className="flex-1 h-8 text-xs"
-              >
-                {isUploading ? 'Uploading...' : selectedFiles.length > 1 ? `Add ${selectedFiles.length}` : 'Add'}
-              </Button>
+            <div className="sticky bottom-0 bg-background pt-2">
+              <div className="flex gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setShowUploadDialog(false)}
+                  className="flex-1 h-8 text-xs"
+                >
+                  Cancel
+                </Button>
+                <Button
+                  onClick={handleUpload}
+                  disabled={selectedFiles.length === 0 || isUploading}
+                  size="sm"
+                  className="flex-1 h-8 text-xs"
+                >
+                  {isUploading ? 'Uploading...' : selectedFiles.length > 1 ? `Add ${selectedFiles.length}` : 'Add'}
+                </Button>
+              </div>
             </div>
           </div>
         </DialogContent>
