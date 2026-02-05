@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import "@/styles/index.css";
 import {
   Tabs,
@@ -21,11 +21,9 @@ import {
   Camera,
   MessageSquare,
   Upload,
-  Sparkles,
   Settings,
   Info,
   BookOpen,
-  Database,
   Calendar,
 } from "lucide-react";
 import { Toaster } from "@/app/components/ui/sonner";
@@ -44,36 +42,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/app/components/ui/popover";
-import { generateDemoHealthData } from "@/app/utils/demo-data";
 import { Button } from "@/app/components/ui/button";
-
-// Generate 90 days of realistic demo data
-const generatedDailyData = generateDemoHealthData(90);
-
-// Use the last 4 weeks for weekly view
-const dummyWeeklyData = generatedDailyData.slice(-28);
-
-// Use last 30 days for daily view
-const dummyDailyData = generatedDailyData.slice(-30);
-
-const dummyWeeklySummary = {
-  weekNumber: 4,
-  dateRange: "Jan 25 - Jan 31, 2026",
-  avgRecovery: 68,
-  avgSleep: 7.5,
-  avgStepsPerDay: 9886, // average per day, not total
-  avgWeight: 174.4,
-  avgHRV: 55,
-  avgRestingHR: 59,
-  avgFeeling: 3.4,
-  trends: {
-    feeling: -8, // -8% vs previous week
-    sleep: 2, // +2% vs previous week
-    steps: -5, // -5% vs previous week
-    weight: -0.5, // -0.5% vs previous week
-    recovery: -3, // -3% vs previous week
-  },
-};
 
 export default function App() {
   const [session, setSession] = useState<Session | null>(null);
@@ -113,8 +82,8 @@ export default function App() {
   const defaultTab = isSunday ? "pictures" : "performance";
 
   const [performanceData, setPerformanceData] = useState({
-    weekly: dummyWeeklyData,
-    daily: dummyDailyData,
+    weekly: [],
+    daily: [],
   });
   const [insights, setInsights] = useState<any[]>([]);
   const [timeHorizon, setTimeHorizon] = useState<
@@ -128,7 +97,6 @@ export default function App() {
   const [daysToShow, setDaysToShow] = useState<7 | 14 | 30>(
     isSaturday ? 14 : 7,
   );
-  const [weeklySummary] = useState(dummyWeeklySummary);
   const [settingsView, setSettingsView] = useState<
     "data" | "review" | "philosophy" | null
   >(null);
@@ -137,6 +105,219 @@ export default function App() {
     null,
   );
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const weeklySummary = useMemo(() => {
+    const daily = performanceData.daily;
+    if (!daily || daily.length < 7) return null;
+
+    const last7 = daily.slice(-7);
+    const prev7 = daily.length >= 14 ? daily.slice(-14, -7) : [];
+
+    const avg = (values: Array<number | null | undefined>) => {
+      const nums = values.filter(
+        (v): v is number => typeof v === "number" && !Number.isNaN(v),
+      );
+      if (nums.length === 0) return null;
+      return nums.reduce((sum, v) => sum + v, 0) / nums.length;
+    };
+
+    const avgRecovery = avg(last7.map((d) => d.recovery)) ?? 0;
+    const avgSleep = avg(last7.map((d) => d.sleep)) ?? 0;
+    const avgStepsPerDay = avg(last7.map((d) => d.steps)) ?? 0;
+    const avgWeight = avg(last7.map((d) => d.weight));
+    const avgHRV = avg(last7.map((d) => d.hrv)) ?? 0;
+    const avgRestingHR = avg(last7.map((d) => d.restingHR)) ?? 0;
+    const avgFeeling = avg(last7.map((d) => d.feeling)) ?? 0;
+
+    const trend = (
+      current: number | null,
+      previous: number | null,
+    ) => {
+      if (current == null || previous == null || previous === 0) {
+        return 0;
+      }
+      return ((current - previous) / previous) * 100;
+    };
+
+    const prevRecovery = avg(prev7.map((d) => d.recovery));
+    const prevSleep = avg(prev7.map((d) => d.sleep));
+    const prevSteps = avg(prev7.map((d) => d.steps));
+    const prevWeight = avg(prev7.map((d) => d.weight));
+    const prevFeeling = avg(prev7.map((d) => d.feeling));
+
+    const startDate = new Date(last7[0].date);
+    const endDate = new Date(last7[last7.length - 1].date);
+    const dateRange = `${startDate.toLocaleDateString("en-US", {
+      month: "short",
+      day: "numeric",
+    })} - ${endDate.toLocaleDateString("en-US", {
+      month: "short",
+      day: "numeric",
+    })}`;
+
+    return {
+      weekNumber: Math.max(1, Math.ceil(daily.length / 7)),
+      dateRange,
+      avgRecovery: Math.round(avgRecovery),
+      avgSleep: Number(avgSleep.toFixed(1)),
+      avgStepsPerDay: Math.round(avgStepsPerDay),
+      avgWeight: avgWeight != null ? Number(avgWeight.toFixed(1)) : undefined,
+      avgHRV: Math.round(avgHRV),
+      avgRestingHR: Math.round(avgRestingHR),
+      avgFeeling: Number(avgFeeling.toFixed(1)),
+      trends: {
+        feeling: trend(avgFeeling, prevFeeling),
+        sleep: trend(avgSleep, prevSleep),
+        steps: trend(avgStepsPerDay, prevSteps),
+        weight: trend(avgWeight ?? null, prevWeight ?? null),
+        recovery: trend(avgRecovery, prevRecovery),
+      },
+    };
+  }, [performanceData.daily]);
+
+  const yearInReviewData = useMemo(() => {
+    const targetYear = 2026;
+    const daily = performanceData.daily.filter((d) =>
+      d.date?.startsWith(`${targetYear}-`),
+    );
+
+    if (daily.length === 0) return null;
+
+    const avg = (values: Array<number | null | undefined>) => {
+      const nums = values.filter(
+        (v): v is number => typeof v === "number" && !Number.isNaN(v),
+      );
+      if (nums.length === 0) return null;
+      return nums.reduce((sum, v) => sum + v, 0) / nums.length;
+    };
+
+    const sum = (values: Array<number | null | undefined>) =>
+      values.reduce((total, v) => total + (typeof v === "number" ? v : 0), 0);
+
+    const totalDays = daily.length;
+    const totalSteps = sum(daily.map((d) => d.steps));
+    const totalSleep = sum(daily.map((d) => d.sleep));
+    const avgFeeling = avg(daily.map((d) => d.feeling)) ?? 0;
+    const avgWeight = avg(daily.map((d) => d.weight));
+
+    const byMonth = new Map<string, typeof daily>();
+    for (const entry of daily) {
+      const monthKey = entry.date.slice(0, 7);
+      if (!byMonth.has(monthKey)) byMonth.set(monthKey, []);
+      byMonth.get(monthKey)?.push(entry);
+    }
+
+    const monthlyBreakdown = Array.from(byMonth.entries()).map(
+      ([monthKey, entries]) => {
+        const monthName = new Date(`${monthKey}-01`).toLocaleDateString(
+          "en-US",
+          { month: "long" },
+        );
+        return {
+          month: monthName,
+          avgFeeling: avg(entries.map((d) => d.feeling)) ?? 0,
+          avgSleep: avg(entries.map((d) => d.sleep)) ?? 0,
+          avgSteps: avg(entries.map((d) => d.steps)) ?? 0,
+          avgWeight: avg(entries.map((d) => d.weight)) ?? undefined,
+        };
+      },
+    );
+
+    const weekChunks: Array<{
+      entries: typeof daily;
+      avgFeeling: number | null;
+      avgSleep: number | null;
+      avgSteps: number | null;
+      dateRange: string;
+    }> = [];
+
+    for (let i = 0; i < daily.length; i += 7) {
+      const chunk = daily.slice(i, i + 7);
+      if (chunk.length === 0) continue;
+      const startDate = new Date(chunk[0].date);
+      const endDate = new Date(chunk[chunk.length - 1].date);
+      weekChunks.push({
+        entries: chunk,
+        avgFeeling: avg(chunk.map((d) => d.feeling)),
+        avgSleep: avg(chunk.map((d) => d.sleep)),
+        avgSteps: avg(chunk.map((d) => d.steps)),
+        dateRange: `${startDate.toLocaleDateString("en-US", {
+          month: "short",
+          day: "numeric",
+        })} - ${endDate.toLocaleDateString("en-US", {
+          month: "short",
+          day: "numeric",
+        })}`,
+      });
+    }
+
+    const getWeekScore = (week: (typeof weekChunks)[number]) => {
+      if (week.avgFeeling != null) return week.avgFeeling;
+      if (week.avgSleep != null) return week.avgSleep;
+      return week.avgSteps ?? 0;
+    };
+
+    const bestWeek =
+      weekChunks.reduce((best, week) =>
+        getWeekScore(week) > getWeekScore(best) ? week : best,
+      ) ?? weekChunks[0];
+
+    const worstWeek =
+      weekChunks.reduce((worst, week) =>
+        getWeekScore(week) < getWeekScore(worst) ? week : worst,
+      ) ?? weekChunks[0];
+
+    const mostStepsDay = daily.reduce((best, day) =>
+      (day.steps ?? 0) > (best.steps ?? 0) ? day : best,
+    );
+    const bestSleepDay = daily.reduce((best, day) =>
+      (day.sleep ?? 0) > (best.sleep ?? 0) ? day : best,
+    );
+    const bestFeelingDay = daily.reduce((best, day) =>
+      (day.feeling ?? 0) > (best.feeling ?? 0) ? day : best,
+    );
+
+    const weights = daily.filter((d) => typeof d.weight === "number");
+    const weightChange =
+      weights.length >= 2
+        ? (weights[weights.length - 1].weight ?? 0) -
+          (weights[0].weight ?? 0)
+        : undefined;
+
+    return {
+      totalDays,
+      totalSteps,
+      totalSleep,
+      avgFeeling,
+      avgWeight: avgWeight ?? undefined,
+      bestWeek: {
+        dateRange: bestWeek.dateRange,
+        avgFeeling: bestWeek.avgFeeling ?? 0,
+        avgSleep: bestWeek.avgSleep ?? 0,
+        avgSteps: bestWeek.avgSteps ?? 0,
+      },
+      worstWeek: {
+        dateRange: worstWeek.dateRange,
+        avgFeeling: worstWeek.avgFeeling ?? 0,
+        avgSleep: worstWeek.avgSleep ?? 0,
+      },
+      monthlyBreakdown,
+      records: {
+        mostSteps: {
+          value: mostStepsDay.steps ?? 0,
+          date: mostStepsDay.date,
+        },
+        bestSleep: {
+          value: bestSleepDay.sleep ?? 0,
+          date: bestSleepDay.date,
+        },
+        bestFeeling: {
+          value: bestFeelingDay.feeling ?? 0,
+          date: bestFeelingDay.date,
+        },
+      },
+      weightChange,
+    };
+  }, [performanceData.daily]);
 
   // Load performance data and insights on mount
   useEffect(() => {
@@ -159,14 +340,13 @@ export default function App() {
 
       if (response.ok) {
         const data = await response.json();
-        // If we have real data, use it; otherwise keep dummy data
-        if (data.weekly && data.weekly.length > 0) {
-          setPerformanceData(data);
-        }
+        setPerformanceData({
+          weekly: Array.isArray(data.weekly) ? data.weekly : [],
+          daily: Array.isArray(data.daily) ? data.daily : [],
+        });
       }
     } catch (error) {
-      // Silently fail and keep using dummy data - don't log to console
-      // This is expected on first load when no data exists
+      // Silently fail - data is optional on first load
     }
   };
 
@@ -438,10 +618,22 @@ export default function App() {
                 </div>
               )}
             </div>
-            <WeeklySummaryCard
-              summary={weeklySummary}
-              dailyData={performanceData.daily}
-            />
+            {weeklySummary ? (
+              <WeeklySummaryCard
+                summary={weeklySummary}
+                dailyData={performanceData.daily}
+              />
+            ) : (
+              <div className="p-6 border border-dashed rounded-lg text-center">
+                <Activity className="size-8 mx-auto mb-2 text-muted-foreground" />
+                <p className="text-sm text-muted-foreground">
+                  No weekly summary yet
+                </p>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Upload data to see your week in review
+                </p>
+              </div>
+            )}
           </div>
         )}
 
@@ -555,128 +747,19 @@ export default function App() {
                 </div>
               </>
             ) : settingsView === "review" ? (
-              <YearInReview
-                year={2026}
-                data={{
-                  totalDays: 365,
-                  totalSteps: 3650000,
-                  totalSleep: 2737.5,
-                  avgFeeling: 3.4,
-                  avgWeight: 174.4,
-                  bestWeek: {
-                    dateRange: "June 1-7, 2026",
-                    avgFeeling: 4.7,
-                    avgSleep: 8.2,
-                    avgSteps: 12500,
-                  },
-                  worstWeek: {
-                    dateRange: "March 15-21, 2026",
-                    avgFeeling: 2.1,
-                    avgSleep: 6.2,
-                  },
-                  monthlyBreakdown: [
-                    {
-                      month: "January",
-                      avgFeeling: 3.2,
-                      avgSleep: 7.3,
-                      avgSteps: 9500,
-                      avgWeight: 176,
-                    },
-                    {
-                      month: "February",
-                      avgFeeling: 3.5,
-                      avgSleep: 7.5,
-                      avgSteps: 10200,
-                      avgWeight: 175.2,
-                    },
-                    {
-                      month: "March",
-                      avgFeeling: 2.8,
-                      avgSleep: 6.8,
-                      avgSteps: 8800,
-                      avgWeight: 175.5,
-                    },
-                    {
-                      month: "April",
-                      avgFeeling: 3.6,
-                      avgSleep: 7.6,
-                      avgSteps: 10800,
-                      avgWeight: 174.8,
-                    },
-                    {
-                      month: "May",
-                      avgFeeling: 3.9,
-                      avgSleep: 7.8,
-                      avgSteps: 11200,
-                      avgWeight: 174.2,
-                    },
-                    {
-                      month: "June",
-                      avgFeeling: 4.2,
-                      avgSleep: 8.0,
-                      avgSteps: 11800,
-                      avgWeight: 173.5,
-                    },
-                    {
-                      month: "July",
-                      avgFeeling: 4.0,
-                      avgSleep: 7.7,
-                      avgSteps: 11500,
-                      avgWeight: 173.8,
-                    },
-                    {
-                      month: "August",
-                      avgFeeling: 3.8,
-                      avgSleep: 7.6,
-                      avgSteps: 11000,
-                      avgWeight: 174.0,
-                    },
-                    {
-                      month: "September",
-                      avgFeeling: 3.7,
-                      avgSleep: 7.5,
-                      avgSteps: 10500,
-                      avgWeight: 174.3,
-                    },
-                    {
-                      month: "October",
-                      avgFeeling: 3.5,
-                      avgSleep: 7.4,
-                      avgSteps: 10200,
-                      avgWeight: 174.5,
-                    },
-                    {
-                      month: "November",
-                      avgFeeling: 3.3,
-                      avgSleep: 7.2,
-                      avgSteps: 9800,
-                      avgWeight: 174.6,
-                    },
-                    {
-                      month: "December",
-                      avgFeeling: 3.4,
-                      avgSleep: 7.4,
-                      avgSteps: 9900,
-                      avgWeight: 174.4,
-                    },
-                  ],
-                  records: {
-                    mostSteps: {
-                      value: 18500,
-                      date: "2026-06-15",
-                    },
-                    bestSleep: {
-                      value: 9.2,
-                      date: "2026-06-22",
-                    },
-                    bestFeeling: {
-                      value: 5,
-                      date: "2026-06-10",
-                    },
-                  },
-                  weightChange: -1.6,
-                }}
-              />
+              yearInReviewData ? (
+                <YearInReview year={2026} data={yearInReviewData} />
+              ) : (
+                <div className="p-6 border border-dashed rounded-lg text-center">
+                  <Calendar className="size-8 mx-auto mb-2 text-muted-foreground" />
+                  <p className="text-sm text-muted-foreground">
+                    No year in review yet
+                  </p>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Upload data to generate your yearly summary
+                  </p>
+                </div>
+              )
             ) : (
               <ProductPhilosophy />
             )}
@@ -851,10 +934,10 @@ export default function App() {
                 <div className="mt-4 p-6 border border-dashed rounded-lg text-center">
                   <Activity className="size-8 mx-auto mb-2 text-muted-foreground" />
                   <p className="text-sm text-muted-foreground">
-                    Demo data active
+                    No insights yet
                   </p>
                   <p className="text-xs text-muted-foreground mt-1">
-                    Upload data to generate real insights
+                    Upload data to generate insights
                   </p>
                 </div>
               )}

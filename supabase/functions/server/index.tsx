@@ -87,20 +87,50 @@ const mapDailyRow = (row: any, userId: string) => ({
   note: row.note ?? null,
 });
 
-const mapDailyResponse = (row: any) => ({
-  date: row.date,
-  recovery: row.recovery,
-  feeling: row.feeling,
-  sleep: row.sleep,
-  hrv: row.hrv,
-  restingHR: row.resting_hr,
-  activeMinutes: row.active_minutes,
-  steps: row.steps,
-  weight: row.weight,
-  strain: row.strain,
-  activeEnergy: row.active_energy,
-  note: row.note ?? undefined,
-});
+const clamp = (value: number, min: number, max: number) =>
+  Math.min(max, Math.max(min, value));
+
+const calculateRecovery = (
+  sleep: number | null,
+  hrv: number | null,
+  restingHR: number | null,
+) => {
+  if (sleep == null || hrv == null || restingHR == null) {
+    return null;
+  }
+
+  const baseRecovery = 60;
+  const recovery =
+    baseRecovery +
+    (hrv - 50) * 0.8 + // HRV drives recovery
+    (8 - restingHR / 10) * 2 +
+    (sleep - 7) * 8;
+
+  return Math.round(clamp(recovery, 20, 95));
+};
+
+const mapDailyResponse = (row: any) => {
+  const derivedRecovery = calculateRecovery(
+    row.sleep,
+    row.hrv,
+    row.resting_hr,
+  );
+
+  return {
+    date: row.date,
+    recovery: row.recovery ?? derivedRecovery,
+    feeling: row.feeling,
+    sleep: row.sleep,
+    hrv: row.hrv,
+    restingHR: row.resting_hr,
+    activeMinutes: row.active_minutes,
+    steps: row.steps,
+    weight: row.weight,
+    strain: row.strain,
+    activeEnergy: row.active_energy,
+    note: row.note ?? undefined,
+  };
+};
 
 const generateWeeklyData = (dailyData: any[]) => {
   const weeks = [];
