@@ -45,8 +45,14 @@ import {
 import { Button } from "@/app/components/ui/button";
 
 export default function App() {
+  const FAST_WINDOW_DAYS = 120;
+  const CACHE_TTL_MS = 6 * 60 * 60 * 1000; // 6 hours
+  const PERFORMANCE_CACHE_KEY = "performance_cache_fast_v1";
+  const INSIGHTS_CACHE_KEY = "insights_cache_fast_v1";
+
   const [session, setSession] = useState<Session | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
+  const [fullDataLoaded, setFullDataLoaded] = useState(false);
 
   useEffect(() => {
     let isMounted = true;
@@ -319,18 +325,83 @@ export default function App() {
     };
   }, [performanceData.daily]);
 
+  const getIsoDateDaysAgo = (days: number) => {
+    const date = new Date();
+    date.setDate(date.getDate() - days);
+    return date.toISOString().split("T")[0];
+  };
+
+  const readCache = (key: string) => {
+    try {
+      const raw = localStorage.getItem(key);
+      if (!raw) return null;
+      const parsed = JSON.parse(raw);
+      if (!parsed?.ts || Date.now() - parsed.ts > CACHE_TTL_MS) {
+        localStorage.removeItem(key);
+        return null;
+      }
+      return parsed.data ?? null;
+    } catch {
+      return null;
+    }
+  };
+
+  const writeCache = (key: string, data: any) => {
+    try {
+      localStorage.setItem(
+        key,
+        JSON.stringify({ ts: Date.now(), data }),
+      );
+    } catch {
+      // Ignore cache write failures
+    }
+  };
+
   // Load performance data and insights on mount
   useEffect(() => {
     if (!session) return;
-    loadPerformanceData();
-    loadInsights();
+    const fastStartDate = getIsoDateDaysAgo(FAST_WINDOW_DAYS);
+
+    // Warm from cache if available
+    const cachedPerformance = readCache(PERFORMANCE_CACHE_KEY);
+    if (cachedPerformance) {
+      setPerformanceData({
+        weekly: Array.isArray(cachedPerformance.weekly) ? cachedPerformance.weekly : [],
+        daily: Array.isArray(cachedPerformance.daily) ? cachedPerformance.daily : [],
+      });
+    }
+    const cachedInsights = readCache(INSIGHTS_CACHE_KEY);
+    if (cachedInsights) {
+      setInsights(cachedInsights.insights || []);
+    }
+
+    loadPerformanceData({ startDate: fastStartDate, cacheKey: PERFORMANCE_CACHE_KEY });
+    loadInsights({ startDate: fastStartDate, cacheKey: INSIGHTS_CACHE_KEY });
   }, [session, timeHorizon]);
 
-  const loadPerformanceData = async () => {
+  useEffect(() => {
+    if (!session) return;
+    if (settingsView === "review" && !fullDataLoaded) {
+      loadPerformanceData({ cacheKey: undefined }).then(() => setFullDataLoaded(true));
+    }
+  }, [settingsView, session, fullDataLoaded, timeHorizon]);
+
+  useEffect(() => {
+    setFullDataLoaded(false);
+  }, [session, timeHorizon]);
+
+  const loadPerformanceData = async (options?: { startDate?: string; endDate?: string; cacheKey?: string }) => {
     if (!session || !functionsBaseUrl) return;
     try {
+      let url = `${functionsBaseUrl}/performance-data?timeHorizon=${timeHorizon}`;
+      if (options?.startDate) {
+        url += `&startDate=${options.startDate}`;
+      }
+      if (options?.endDate) {
+        url += `&endDate=${options.endDate}`;
+      }
       const response = await fetch(
-        `${functionsBaseUrl}/performance-data?timeHorizon=${timeHorizon}`,
+        url,
         {
           headers: {
             Authorization: `Bearer ${session.access_token}`,
@@ -344,17 +415,30 @@ export default function App() {
           weekly: Array.isArray(data.weekly) ? data.weekly : [],
           daily: Array.isArray(data.daily) ? data.daily : [],
         });
+        if (options?.cacheKey) {
+          writeCache(options.cacheKey, {
+            weekly: Array.isArray(data.weekly) ? data.weekly : [],
+            daily: Array.isArray(data.daily) ? data.daily : [],
+          });
+        }
       }
     } catch (error) {
       // Silently fail - data is optional on first load
     }
   };
 
-  const loadInsights = async () => {
+  const loadInsights = async (options?: { startDate?: string; endDate?: string; cacheKey?: string }) => {
     if (!session || !functionsBaseUrl) return;
     try {
+      let url = `${functionsBaseUrl}/insights`;
+      if (options?.startDate) {
+        url += `?startDate=${options.startDate}`;
+        if (options?.endDate) url += `&endDate=${options.endDate}`;
+      } else if (options?.endDate) {
+        url += `?endDate=${options.endDate}`;
+      }
       const response = await fetch(
-        `${functionsBaseUrl}/insights`,
+        url,
         {
           headers: {
             Authorization: `Bearer ${session.access_token}`,
@@ -365,6 +449,9 @@ export default function App() {
       if (response.ok) {
         const data = await response.json();
         setInsights(data.insights || []);
+        if (options?.cacheKey) {
+          writeCache(options.cacheKey, { insights: data.insights || [] });
+        }
       }
     } catch (error) {
       // Silently fail - insights are optional

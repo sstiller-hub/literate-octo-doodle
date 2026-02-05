@@ -259,11 +259,22 @@ app.get("/make-server-84ed1a00/performance-data", async (c) => {
 
     const { supabase, user } = auth;
     const timeHorizon = c.req.query('timeHorizon') || 'week';
+    const startDate = c.req.query('startDate') || null;
+    const endDate = c.req.query('endDate') || null;
 
-    const { data: dailyRows, error } = await supabase
+    let dailyQuery = supabase
       .from("daily_metrics")
       .select("*")
-      .eq("user_id", user.id)
+      .eq("user_id", user.id);
+
+    if (startDate) {
+      dailyQuery = dailyQuery.gte("date", startDate);
+    }
+    if (endDate) {
+      dailyQuery = dailyQuery.lte("date", endDate);
+    }
+
+    const { data: dailyRows, error } = await dailyQuery
       .order("date", { ascending: true });
 
     if (error) {
@@ -374,10 +385,22 @@ app.get("/make-server-84ed1a00/insights", async (c) => {
     if (auth.error) return auth.error;
 
     const { supabase, user } = auth;
-    const { data: dailyRows, error } = await supabase
+    const startDate = c.req.query('startDate') || null;
+    const endDate = c.req.query('endDate') || null;
+
+    let dailyQuery = supabase
       .from("daily_metrics")
       .select("*")
-      .eq("user_id", user.id)
+      .eq("user_id", user.id);
+
+    if (startDate) {
+      dailyQuery = dailyQuery.gte("date", startDate);
+    }
+    if (endDate) {
+      dailyQuery = dailyQuery.lte("date", endDate);
+    }
+
+    const { data: dailyRows, error } = await dailyQuery
       .order("date", { ascending: true });
 
     if (error) {
