@@ -29,8 +29,8 @@ export function ProgressPictures({ onUploadSuccess, authToken }: ProgressPicture
   const [showUploadDialog, setShowUploadDialog] = useState(false);
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
   const [notes, setNotes] = useState('');
-  const [selectedFile, setSelectedFile] = useState<File | null>(null);
-  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
+  const [previewUrls, setPreviewUrls] = useState<string[]>([]);
   const [selectedView, setSelectedView] = useState<'front' | 'side' | 'back'>('front');
   const [showCamera, setShowCamera] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -44,6 +44,22 @@ export function ProgressPictures({ onUploadSuccess, authToken }: ProgressPicture
   // Custom date selection
   const [customStartDate, setCustomStartDate] = useState<string>('');
   const [customEndDate, setCustomEndDate] = useState<string>('');
+
+  const parseTitle = (name: string) => {
+    const baseName = name.replace(/\.[^/.]+$/, "");
+    const dateMatch = baseName.match(/\b(20\d{2}-\d{2}-\d{2})\b/);
+    const viewMatch = baseName.match(/\b(front|side|back)\b/i);
+    return {
+      parsedDate: dateMatch?.[1] || null,
+      parsedView: viewMatch?.[1]?.toLowerCase() as 'front' | 'side' | 'back' | undefined,
+    };
+  };
+
+  useEffect(() => {
+    return () => {
+      previewUrls.forEach((url) => URL.revokeObjectURL(url));
+    };
+  }, [previewUrls]);
 
   // Load pictures on mount
   useEffect(() => {
@@ -72,44 +88,44 @@ export function ProgressPictures({ onUploadSuccess, authToken }: ProgressPicture
   };
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
+    const files = Array.from(e.target.files || []);
+    if (files.length === 0) return;
+
+    for (const file of files) {
       if (file.size > 10 * 1024 * 1024) {
-        toast.error('File size must be less than 10MB');
+        toast.error(`"${file.name}" is larger than 10MB`);
         return;
       }
-
       if (!file.type.startsWith('image/')) {
-        toast.error('Please select an image file');
+        toast.error(`"${file.name}" is not an image`);
         return;
       }
-
-      setSelectedFile(file);
-      
-      // Create preview
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setPreviewUrl(reader.result as string);
-      };
-      reader.readAsDataURL(file);
     }
+
+    const first = files[0];
+    const { parsedDate, parsedView } = parseTitle(first.name);
+    if (parsedDate) setSelectedDate(parsedDate);
+    if (parsedView) setSelectedView(parsedView);
+
+    previewUrls.forEach((url) => URL.revokeObjectURL(url));
+    setSelectedFiles(files);
+    setPreviewUrls(files.map((file) => URL.createObjectURL(file)));
   };
 
   const handleCameraCapture = (blob: Blob) => {
     // Convert blob to file
     const file = new File([blob], `progress-${Date.now()}.jpg`, { type: 'image/jpeg' });
-    setSelectedFile(file);
+    previewUrls.forEach((url) => URL.revokeObjectURL(url));
+    setSelectedFiles([file]);
+    setPreviewUrls([URL.createObjectURL(file)]);
     
-    // Create preview
-    const reader = new FileReader();
-    reader.onloadend = () => {
-      setPreviewUrl(reader.result as string);
-    };
-    reader.readAsDataURL(file);
+    const { parsedDate, parsedView } = parseTitle(file.name);
+    if (parsedDate) setSelectedDate(parsedDate);
+    if (parsedView) setSelectedView(parsedView);
   };
 
   const handleUpload = async () => {
-    if (!selectedFile) {
+    if (selectedFiles.length === 0) {
       toast.error('Please select a photo');
       return;
     }
@@ -117,33 +133,50 @@ export function ProgressPictures({ onUploadSuccess, authToken }: ProgressPicture
     setIsUploading(true);
 
     try {
-      const formData = new FormData();
-      formData.append('file', selectedFile);
-      formData.append('date', selectedDate);
-      formData.append('notes', notes);
-      formData.append('view', selectedView);
+      let successCount = 0;
+      let errorCount = 0;
 
-      const response = await fetch(
-        `${functionsBaseUrl}/progress-picture/upload`,
-        {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${authToken}`
-          },
-          body: formData
+      for (const file of selectedFiles) {
+        const { parsedDate, parsedView } = parseTitle(file.name);
+        const finalDate = parsedDate || selectedDate;
+        const finalView = parsedView || selectedView;
+
+        const formData = new FormData();
+        formData.append('file', file);
+        formData.append('date', finalDate);
+        formData.append('notes', notes);
+        formData.append('view', finalView);
+
+        const response = await fetch(
+          `${functionsBaseUrl}/progress-picture/upload`,
+          {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${authToken}`
+            },
+            body: formData
+          }
+        );
+
+        if (!response.ok) {
+          errorCount += 1;
+          continue;
         }
-      );
 
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.error || 'Upload failed');
+        successCount += 1;
       }
 
-      toast.success('Photo added');
+      if (successCount > 0) {
+        toast.success(`Added ${successCount} photo${successCount > 1 ? 's' : ''}`);
+      }
+      if (errorCount > 0) {
+        toast.error(`Failed to add ${errorCount} photo${errorCount > 1 ? 's' : ''}`);
+      }
       
       // Reset form
-      setSelectedFile(null);
-      setPreviewUrl(null);
+      previewUrls.forEach((url) => URL.revokeObjectURL(url));
+      setSelectedFiles([]);
+      setPreviewUrls([]);
       setNotes('');
       setShowUploadDialog(false);
       if (fileInputRef.current) {
@@ -295,6 +328,7 @@ export function ProgressPictures({ onUploadSuccess, authToken }: ProgressPicture
                 ref={fileInputRef}
                 type="file"
                 accept="image/*"
+                multiple
                 onChange={handleFileSelect}
                 className="hidden"
               />
@@ -310,13 +344,17 @@ export function ProgressPictures({ onUploadSuccess, authToken }: ProgressPicture
             </div>
 
             {/* Preview */}
-            {previewUrl && (
-              <div className="relative w-full aspect-[3/4] bg-muted rounded-md overflow-hidden">
-                <img 
-                  src={previewUrl} 
-                  alt="Preview" 
-                  className="w-full h-full object-cover"
-                />
+            {previewUrls.length > 0 && (
+              <div className="grid grid-cols-3 gap-2">
+                {previewUrls.map((url, idx) => (
+                  <div key={url} className="relative w-full aspect-[3/4] bg-muted rounded-md overflow-hidden">
+                    <img 
+                      src={url} 
+                      alt={`Preview ${idx + 1}`} 
+                      className="w-full h-full object-cover"
+                    />
+                  </div>
+                ))}
               </div>
             )}
 
@@ -332,6 +370,11 @@ export function ProgressPictures({ onUploadSuccess, authToken }: ProgressPicture
                 onChange={(e) => setSelectedDate(e.target.value)}
                 className="h-8 text-xs"
               />
+              {selectedFiles.length > 1 && (
+                <p className="text-[10px] text-muted-foreground">
+                  Filename date overrides this default.
+                </p>
+              )}
             </div>
 
             {/* View Selection */}
@@ -366,6 +409,11 @@ export function ProgressPictures({ onUploadSuccess, authToken }: ProgressPicture
                   Back
                 </Button>
               </div>
+              {selectedFiles.length > 1 && (
+                <p className="text-[10px] text-muted-foreground">
+                  Filename view overrides this default.
+                </p>
+              )}
             </div>
 
             {/* Notes */}
@@ -392,11 +440,11 @@ export function ProgressPictures({ onUploadSuccess, authToken }: ProgressPicture
               </Button>
               <Button
                 onClick={handleUpload}
-                disabled={!selectedFile || isUploading}
+                disabled={selectedFiles.length === 0 || isUploading}
                 size="sm"
                 className="flex-1 h-8 text-xs"
               >
-                {isUploading ? 'Uploading...' : 'Add'}
+                {isUploading ? 'Uploading...' : selectedFiles.length > 1 ? `Add ${selectedFiles.length}` : 'Add'}
               </Button>
             </div>
           </div>

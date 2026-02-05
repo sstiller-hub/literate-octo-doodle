@@ -547,6 +547,10 @@ export function ReadinessView({ data, viewMode, daysToShow = 30, onExpandAIChat 
   const hrvBaseline = calculateBaseline('hrv');
   const rhrBaseline = calculateBaseline('restingHR');
 
+  const safeSleep = Number.isFinite(current.sleep) ? current.sleep : null;
+  const safeHrv = Number.isFinite(current.hrv) ? current.hrv : null;
+  const safeRhr = Number.isFinite(current.restingHR) ? current.restingHR : null;
+
   // Get last 7 days for mini trend charts
   const last7Days = filteredData.slice(-7);
 
@@ -603,8 +607,11 @@ export function ReadinessView({ data, viewMode, daysToShow = 30, onExpandAIChat 
                   <Moon className="size-3" />
                   <span className="text-xs">Sleep</span>
                 </div>
-                <p className="text-2xl font-semibold">{current.sleep.toFixed(1)}<span className="text-sm font-normal text-muted-foreground">h</span></p>
-                {sleepBaseline && (
+                <p className="text-2xl font-semibold">
+                  {safeSleep != null ? safeSleep.toFixed(1) : "--"}
+                  <span className="text-sm font-normal text-muted-foreground">h</span>
+                </p>
+                {sleepBaseline && safeSleep != null && (
                   <div className="mt-1">
                     <div className="w-16 h-6 ml-auto">
                       <ResponsiveContainer width="100%" height="100%">
@@ -612,7 +619,7 @@ export function ReadinessView({ data, viewMode, daysToShow = 30, onExpandAIChat 
                           <Line 
                             type="monotone" 
                             dataKey="sleep" 
-                            stroke={current.sleep >= sleepBaseline ? "hsl(142 76% 36%)" : "hsl(25 95% 53%)"}
+                            stroke={safeSleep >= sleepBaseline ? "hsl(142 76% 36%)" : "hsl(25 95% 53%)"}
                             strokeWidth={1.5}
                             dot={false}
                           />
@@ -625,8 +632,8 @@ export function ReadinessView({ data, viewMode, daysToShow = 30, onExpandAIChat 
                         </LineChart>
                       </ResponsiveContainer>
                     </div>
-                    <p className={`text-[9px] mt-0.5 ${current.sleep >= sleepBaseline ? 'text-green-600' : 'text-orange-600'}`}>
-                      {current.sleep >= sleepBaseline ? '+' : ''}{(current.sleep - sleepBaseline).toFixed(1)}h
+                    <p className={`text-[9px] mt-0.5 ${safeSleep >= sleepBaseline ? 'text-green-600' : 'text-orange-600'}`}>
+                      {safeSleep >= sleepBaseline ? '+' : ''}{(safeSleep - sleepBaseline).toFixed(1)}h
                     </p>
                   </div>
                 )}
@@ -636,8 +643,11 @@ export function ReadinessView({ data, viewMode, daysToShow = 30, onExpandAIChat 
                   <Heart className="size-3" />
                   <span className="text-xs">HRV</span>
                 </div>
-                <p className="text-2xl font-semibold">{Math.round(current.hrv)}<span className="text-sm font-normal text-muted-foreground">ms</span></p>
-                {hrvBaseline && (
+                <p className="text-2xl font-semibold">
+                  {safeHrv != null ? Math.round(safeHrv) : "--"}
+                  <span className="text-sm font-normal text-muted-foreground">ms</span>
+                </p>
+                {hrvBaseline && safeHrv != null && (
                   <div className="mt-1">
                     <div className="w-16 h-6 ml-auto">
                       <ResponsiveContainer width="100%" height="100%">
@@ -645,7 +655,7 @@ export function ReadinessView({ data, viewMode, daysToShow = 30, onExpandAIChat 
                           <Line 
                             type="monotone" 
                             dataKey="hrv" 
-                            stroke={current.hrv >= hrvBaseline ? "hsl(142 76% 36%)" : "hsl(25 95% 53%)"}
+                            stroke={safeHrv >= hrvBaseline ? "hsl(142 76% 36%)" : "hsl(25 95% 53%)"}
                             strokeWidth={1.5}
                             dot={false}
                           />
@@ -658,8 +668,8 @@ export function ReadinessView({ data, viewMode, daysToShow = 30, onExpandAIChat 
                         </LineChart>
                       </ResponsiveContainer>
                     </div>
-                    <p className={`text-[9px] mt-0.5 ${current.hrv >= hrvBaseline ? 'text-green-600' : 'text-orange-600'}`}>
-                      {current.hrv >= hrvBaseline ? '+' : ''}{Math.round(current.hrv - hrvBaseline)}ms
+                    <p className={`text-[9px] mt-0.5 ${safeHrv >= hrvBaseline ? 'text-green-600' : 'text-orange-600'}`}>
+                      {safeHrv >= hrvBaseline ? '+' : ''}{Math.round(safeHrv - hrvBaseline)}ms
                     </p>
                   </div>
                 )}
@@ -669,8 +679,11 @@ export function ReadinessView({ data, viewMode, daysToShow = 30, onExpandAIChat 
                   <ActivityIcon className="size-3" />
                   <span className="text-xs">RHR</span>
                 </div>
-                <p className="text-2xl font-semibold">{Math.round(current.restingHR)}<span className="text-sm font-normal text-muted-foreground">bpm</span></p>
-                {rhrBaseline && (
+                <p className="text-2xl font-semibold">
+                  {safeRhr != null ? Math.round(safeRhr) : "--"}
+                  <span className="text-sm font-normal text-muted-foreground">bpm</span>
+                </p>
+                {rhrBaseline && safeRhr != null && (
                   <div className="mt-1">
                     <div className="w-16 h-6 ml-auto">
                       <ResponsiveContainer width="100%" height="100%">
@@ -678,7 +691,7 @@ export function ReadinessView({ data, viewMode, daysToShow = 30, onExpandAIChat 
                           <Line 
                             type="monotone" 
                             dataKey="restingHR" 
-                            stroke={current.restingHR <= rhrBaseline ? "hsl(142 76% 36%)" : "hsl(25 95% 53%)"}
+                            stroke={safeRhr <= rhrBaseline ? "hsl(142 76% 36%)" : "hsl(25 95% 53%)"}
                             strokeWidth={1.5}
                             dot={false}
                           />
@@ -691,8 +704,8 @@ export function ReadinessView({ data, viewMode, daysToShow = 30, onExpandAIChat 
                         </LineChart>
                       </ResponsiveContainer>
                     </div>
-                    <p className={`text-[9px] mt-0.5 ${current.restingHR <= rhrBaseline ? 'text-green-600' : 'text-orange-600'}`}>
-                      {current.restingHR <= rhrBaseline ? '' : '+'}{Math.round(current.restingHR - rhrBaseline)}bpm
+                    <p className={`text-[9px] mt-0.5 ${safeRhr <= rhrBaseline ? 'text-green-600' : 'text-orange-600'}`}>
+                      {safeRhr <= rhrBaseline ? '' : '+'}{Math.round(safeRhr - rhrBaseline)}bpm
                     </p>
                   </div>
                 )}

@@ -882,25 +882,39 @@ app.post("/make-server-84ed1a00/progress-picture/upload", async (c) => {
     const formData = await c.req.formData();
     const file = formData.get('file') as File;
     const date = formData.get('date') as string;
-    const notes = formData.get('notes') as string || '';
-    const view = formData.get('view') as string || 'front';
+    const notes = (formData.get('notes') as string) || '';
+    const view = (formData.get('view') as string) || 'front';
     
     if (!file) {
       return c.json({ success: false, error: 'No file provided' }, 400);
     }
     
-    if (!date) {
-      return c.json({ success: false, error: 'No date provided' }, 400);
+    const parseTitle = (name: string) => {
+      const baseName = name.replace(/\.[^/.]+$/, "");
+      const dateMatch = baseName.match(/\b(20\d{2}-\d{2}-\d{2})\b/);
+      const viewMatch = baseName.match(/\b(front|side|back)\b/i);
+      return {
+        parsedDate: dateMatch?.[1] || null,
+        parsedView: viewMatch?.[1]?.toLowerCase() as 'front' | 'side' | 'back' | undefined,
+      };
+    };
+
+    const { parsedDate, parsedView } = parseTitle(file.name);
+    const finalDate = date || parsedDate;
+    const finalView = (['front', 'side', 'back'].includes(view) ? view : parsedView) || 'front';
+
+    if (!finalDate) {
+      return c.json({ success: false, error: 'No date provided (and none found in file name)' }, 400);
     }
-    
+
     // Validate view
-    if (!['front', 'side', 'back'].includes(view)) {
+    if (!['front', 'side', 'back'].includes(finalView)) {
       return c.json({ success: false, error: 'Invalid view. Must be front, side, or back' }, 400);
     }
     
     // Generate unique filename with view
     const fileExt = file.name.split('.').pop();
-    const fileName = `${date}-${view}-${Date.now()}.${fileExt}`;
+    const fileName = `${finalDate}-${finalView}-${Date.now()}.${fileExt}`;
     
     // Convert File to ArrayBuffer
     const arrayBuffer = await file.arrayBuffer();
@@ -923,9 +937,9 @@ app.post("/make-server-84ed1a00/progress-picture/upload", async (c) => {
       .from("progress_pictures")
       .insert({
         user_id: user.id,
-        date,
+        date: finalDate,
         notes,
-        view,
+        view: finalView,
         storage_path: fileName,
       })
       .select("*")
