@@ -241,7 +241,7 @@ export function RollingAverageDashboard({ data, timeHorizon, onTimeHorizonChange
           <CardDescription>7-day rolling average - subjective wellness (1-5 scale)</CardDescription>
         </CardHeader>
         <CardContent>
-          <ResponsiveContainer width="100%" height={240}>
+          <ResponsiveContainer width="100%" height={240} minHeight={240}>
             <LineChart data={filteredData}>
               <CartesianGrid strokeDasharray="3 3" opacity={0.3} />
               <XAxis 
@@ -276,7 +276,7 @@ export function RollingAverageDashboard({ data, timeHorizon, onTimeHorizonChange
           <CardDescription>7-day rolling average</CardDescription>
         </CardHeader>
         <CardContent>
-          <ResponsiveContainer width="100%" height={200}>
+          <ResponsiveContainer width="100%" height={200} minHeight={200}>
             <AreaChart data={filteredData}>
               <defs>
                 <linearGradient id="colorSteps" x1="0" y1="0" x2="0" y2="1">
@@ -320,7 +320,7 @@ export function RollingAverageDashboard({ data, timeHorizon, onTimeHorizonChange
             <CardDescription>7-day rolling average</CardDescription>
           </CardHeader>
           <CardContent>
-            <ResponsiveContainer width="100%" height={200}>
+            <ResponsiveContainer width="100%" height={200} minHeight={200}>
               <LineChart data={filteredData}>
                 <CartesianGrid strokeDasharray="3 3" opacity={0.3} />
                 <XAxis 
@@ -359,7 +359,7 @@ export function RollingAverageDashboard({ data, timeHorizon, onTimeHorizonChange
           <CardDescription>7-day rolling average - higher is better</CardDescription>
         </CardHeader>
         <CardContent>
-          <ResponsiveContainer width="100%" height={200}>
+          <ResponsiveContainer width="100%" height={200} minHeight={200}>
             <AreaChart data={filteredData}>
               <defs>
                 <linearGradient id="colorHRV" x1="0" y1="0" x2="0" y2="1">
@@ -402,7 +402,7 @@ export function RollingAverageDashboard({ data, timeHorizon, onTimeHorizonChange
           <CardDescription>7-day rolling average</CardDescription>
         </CardHeader>
         <CardContent>
-          <ResponsiveContainer width="100%" height={200}>
+          <ResponsiveContainer width="100%" height={200} minHeight={200}>
             <LineChart data={filteredData}>
               <CartesianGrid strokeDasharray="3 3" opacity={0.3} />
               <XAxis 
@@ -437,7 +437,7 @@ export function RollingAverageDashboard({ data, timeHorizon, onTimeHorizonChange
           <CardDescription>7-day rolling average - lower trends = better fitness</CardDescription>
         </CardHeader>
         <CardContent>
-          <ResponsiveContainer width="100%" height={200}>
+          <ResponsiveContainer width="100%" height={200} minHeight={200}>
             <LineChart data={filteredData}>
               <CartesianGrid strokeDasharray="3 3" opacity={0.3} />
               <XAxis 
@@ -475,7 +475,7 @@ export function RollingAverageDashboard({ data, timeHorizon, onTimeHorizonChange
           <CardDescription>7-day rolling average active minutes</CardDescription>
         </CardHeader>
         <CardContent>
-          <ResponsiveContainer width="100%" height={200}>
+          <ResponsiveContainer width="100%" height={200} minHeight={200}>
             <AreaChart data={filteredData}>
               <defs>
                 <linearGradient id="colorActive" x1="0" y1="0" x2="0" y2="1">
