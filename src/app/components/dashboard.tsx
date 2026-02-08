@@ -95,7 +95,7 @@ export function Dashboard({ data }: DashboardProps) {
             <CardDescription>Your walking activity over time</CardDescription>
           </CardHeader>
           <CardContent>
-            <ResponsiveContainer width="100%" height={200}>
+            <ResponsiveContainer width="100%" height={200} minHeight={200}>
               <AreaChart data={data.steps}>
                 <defs>
                   <linearGradient id="colorSteps" x1="0" y1="0" x2="0" y2="1">
@@ -136,7 +136,7 @@ export function Dashboard({ data }: DashboardProps) {
             <CardDescription>Heart rate measurements over time</CardDescription>
           </CardHeader>
           <CardContent>
-            <ResponsiveContainer width="100%" height={200}>
+            <ResponsiveContainer width="100%" height={200} minHeight={200}>
               <LineChart data={data.heartRate}>
                 <CartesianGrid strokeDasharray="3 3" opacity={0.3} />
                 <XAxis 
@@ -171,7 +171,7 @@ export function Dashboard({ data }: DashboardProps) {
             <CardDescription>Hours of sleep per night</CardDescription>
           </CardHeader>
           <CardContent>
-            <ResponsiveContainer width="100%" height={200}>
+            <ResponsiveContainer width="100%" height={200} minHeight={200}>
               <BarChart data={data.sleep}>
                 <CartesianGrid strokeDasharray="3 3" opacity={0.3} />
                 <XAxis 
@@ -232,7 +232,7 @@ export function Dashboard({ data }: DashboardProps) {
             <CardDescription>Calories burned through activity</CardDescription>
           </CardHeader>
           <CardContent>
-            <ResponsiveContainer width="100%" height={200}>
+            <ResponsiveContainer width="100%" height={200} minHeight={200}>
               <AreaChart data={data.activeEnergy}>
                 <defs>
                   <linearGradient id="colorEnergy" x1="0" y1="0" x2="0" y2="1">
@@ -273,7 +273,7 @@ export function Dashboard({ data }: DashboardProps) {
             <CardDescription>Body weight over time</CardDescription>
           </CardHeader>
           <CardContent>
-            <ResponsiveContainer width="100%" height={200}>
+            <ResponsiveContainer width="100%" height={200} minHeight={200}>
               <LineChart data={data.weight}>
                 <CartesianGrid strokeDasharray="3 3" opacity={0.3} />
                 <XAxis 
