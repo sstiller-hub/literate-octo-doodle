@@ -130,7 +130,7 @@ export function PerformanceDashboard({ data, timeHorizon, onTimeHorizonChange }:
           <CardDescription>Track your training load and recovery</CardDescription>
         </CardHeader>
         <CardContent>
-          <ResponsiveContainer width="100%" height={240}>
+          <ResponsiveContainer width="100%" height={240} minHeight={240}>
             <ComposedChart data={data.weekly}>
               <CartesianGrid strokeDasharray="3 3" opacity={0.3} />
               <XAxis 
@@ -171,7 +171,7 @@ export function PerformanceDashboard({ data, timeHorizon, onTimeHorizonChange }:
           <CardDescription>Recovery indicator - higher is better</CardDescription>
         </CardHeader>
         <CardContent>
-          <ResponsiveContainer width="100%" height={200}>
+          <ResponsiveContainer width="100%" height={200} minHeight={200}>
             <AreaChart data={data.weekly}>
               <defs>
                 <linearGradient id="colorHRV" x1="0" y1="0" x2="0" y2="1">
@@ -206,7 +206,7 @@ export function PerformanceDashboard({ data, timeHorizon, onTimeHorizonChange }:
           <CardDescription>Weekly average sleep hours</CardDescription>
         </CardHeader>
         <CardContent>
-          <ResponsiveContainer width="100%" height={200}>
+          <ResponsiveContainer width="100%" height={200} minHeight={200}>
             <BarChart data={data.weekly}>
               <CartesianGrid strokeDasharray="3 3" opacity={0.3} />
               <XAxis 
@@ -233,7 +233,7 @@ export function PerformanceDashboard({ data, timeHorizon, onTimeHorizonChange }:
           <CardDescription>Lower trends indicate improved fitness</CardDescription>
         </CardHeader>
         <CardContent>
-          <ResponsiveContainer width="100%" height={200}>
+          <ResponsiveContainer width="100%" height={200} minHeight={200}>
             <LineChart data={data.weekly}>
               <CartesianGrid strokeDasharray="3 3" opacity={0.3} />
               <XAxis 
@@ -265,7 +265,7 @@ export function PerformanceDashboard({ data, timeHorizon, onTimeHorizonChange }:
           <CardDescription>Weekly active minutes</CardDescription>
         </CardHeader>
         <CardContent>
-          <ResponsiveContainer width="100%" height={200}>
+          <ResponsiveContainer width="100%" height={200} minHeight={200}>
             <BarChart data={data.weekly}>
               <CartesianGrid strokeDasharray="3 3" opacity={0.3} />
               <XAxis 
